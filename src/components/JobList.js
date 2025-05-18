@@ -2,20 +2,22 @@
 import React, { useState } from "react";
 import JobDetail from "./JobDetail";
 
-function JobList({ jobs }) {
+function JobList({ jobs, userId }) {
   const [selectedJob, setSelectedJob] = useState(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Updated to match the API's JobStatusEnum values
   const statusOptions = [
     { value: "ALL", label: "All Jobs" },
     { value: "NEW", label: "New" },
     { value: "INTERESTED", label: "Interested" },
+    { value: "RESUME_GENERATED", label: "Resume Generated" },
     { value: "APPLIED", label: "Applied" },
-    { value: "INTERVIEWING", label: "Interviewing" },
+    { value: "INTERVIEW", label: "Interviewing" },
     { value: "OFFER", label: "Offer" },
     { value: "REJECTED", label: "Rejected" },
-    { value: "NOT_INTERESTED", label: "Not Interested" }
+    { value: "DECLINED", label: "Declined" }
   ];
 
   const filteredJobs = jobs.filter(job => {
@@ -38,6 +40,7 @@ function JobList({ jobs }) {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
+          "X-User-ID": userId // Added user authentication
         },
         body: JSON.stringify({
           status: newStatus
@@ -116,10 +119,12 @@ function JobList({ jobs }) {
                       <p className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                         job.status === "NEW" ? "bg-gray-100 text-gray-800" :
                         job.status === "INTERESTED" ? "bg-blue-100 text-blue-800" :
+                        job.status === "RESUME_GENERATED" ? "bg-purple-100 text-purple-800" :
                         job.status === "APPLIED" ? "bg-yellow-100 text-yellow-800" :
-                        job.status === "INTERVIEWING" ? "bg-purple-100 text-purple-800" :
+                        job.status === "INTERVIEW" ? "bg-purple-100 text-purple-800" :
                         job.status === "OFFER" ? "bg-green-100 text-green-800" :
                         job.status === "REJECTED" ? "bg-red-100 text-red-800" :
+                        job.status === "DECLINED" ? "bg-orange-100 text-orange-800" :
                         "bg-gray-100 text-gray-800"
                       }`}>
                         {job.status || "NEW"}
@@ -151,7 +156,7 @@ function JobList({ jobs }) {
       </div>
 
       {selectedJob ? (
-        <JobDetail job={selectedJob} onStatusChange={handleStatusChange} />
+        <JobDetail job={selectedJob} onStatusChange={handleStatusChange} userId={userId} />
       ) : (
         <div className="bg-white shadow sm:rounded-lg p-6 flex items-center justify-center">
           <p className="text-gray-500">Select a job to view details</p>

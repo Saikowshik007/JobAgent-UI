@@ -1,15 +1,88 @@
-import React from "react";
+import React, { useState } from "react";
 
-function JobDetail({ job, onStatusChange }) {
+function JobDetail({ job, onStatusChange, userId }) {
+  const [generatingResume, setGeneratingResume] = useState(false);
+  const [resumeError, setResumeError] = useState("");
+  const [resumeMessage, setResumeMessage] = useState("");
+  const [uploadingToSimplify, setUploadingToSimplify] = useState(false);
+
+  // Updated to match the API's JobStatusEnum values
   const statusOptions = [
     { value: "NEW", label: "New" },
     { value: "INTERESTED", label: "Interested" },
+    { value: "RESUME_GENERATED", label: "Resume Generated" },
     { value: "APPLIED", label: "Applied" },
-    { value: "INTERVIEWING", label: "Interviewing" },
+    { value: "INTERVIEW", label: "Interviewing" },
     { value: "OFFER", label: "Offer" },
     { value: "REJECTED", label: "Rejected" },
-    { value: "NOT_INTERESTED", label: "Not Interested" }
+    { value: "DECLINED", label: "Declined" }
   ];
+
+  const handleGenerateResume = async () => {
+    try {
+      setGeneratingResume(true);
+      setResumeError("");
+      setResumeMessage("");
+
+      const response = await fetch("http://localhost:8000/api/resume/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-ID": userId
+        },
+        body: JSON.stringify({
+          job_id: job.id,
+          customize: true
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setResumeMessage("Resume generated successfully!");
+
+      // Update job status to RESUME_GENERATED
+      onStatusChange(job.id, "RESUME_GENERATED");
+
+    } catch (error) {
+      setResumeError("Failed to generate resume: " + error.message);
+    } finally {
+      setGeneratingResume(false);
+    }
+  };
+
+  const handleUploadToSimplify = async () => {
+    try {
+      setUploadingToSimplify(true);
+      setResumeError("");
+      setResumeMessage("");
+
+      const response = await fetch("http://localhost:8000/api/resume/upload-to-simplify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-ID": userId
+        },
+        body: JSON.stringify({
+          job_id: job.id
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setResumeMessage("Resume uploaded to Simplify successfully!");
+
+    } catch (error) {
+      setResumeError("Failed to upload to Simplify: " + error.message);
+    } finally {
+      setUploadingToSimplify(false);
+    }
+  };
 
   return (
     <div className="bg-white shadow overflow-hidden sm:rounded-lg">
@@ -82,20 +155,60 @@ function JobDetail({ job, onStatusChange }) {
           </div>
         </dl>
       </div>
+
+      {resumeError && (
+        <div className="px-4 py-3 bg-red-100 text-red-700 border border-red-400 rounded mx-4 my-2">
+          {resumeError}
+        </div>
+      )}
+
+      {resumeMessage && (
+        <div className="px-4 py-3 bg-green-100 text-green-700 border border-green-400 rounded mx-4 my-2">
+          {resumeMessage}
+        </div>
+      )}
+
       <div className="px-4 py-3 bg-gray-50 text-right sm:px-6 space-x-3">
         <button
           type="button"
           className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          onClick={() => onStatusChange(job.id, "APPLIED")}
+          onClick={handleGenerateResume}
+          disabled={generatingResume}
         >
-          Mark as Applied
+          {generatingResume ? (
+            <>
+              <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></span>
+              Generating Resume...
+            </>
+          ) : (
+            "Generate Resume"
+          )}
         </button>
 
         <button
           type="button"
           className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          onClick={() => window.open(job.linkedin_url, '_blank')}
-          disabled={!job.linkedin_url}
+          onClick={handleUploadToSimplify}
+          disabled={uploadingToSimplify || job.status !== "RESUME_GENERATED"}
+        >
+          {uploadingToSimplify ? (
+            <>
+              <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-gray-700 rounded-full"></span>
+              Uploading to Simplify...
+            </>
+          ) : (
+            "Upload to Simplify"
+          )}
+        </button>
+
+        <button
+          type="button"
+          className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          onClick={() => {
+            onStatusChange(job.id, "APPLIED");
+            window.open(job.url, '_blank');
+          }}
+          disabled={!job.url}
         >
           Apply on LinkedIn
         </button>

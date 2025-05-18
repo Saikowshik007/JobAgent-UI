@@ -1,7 +1,7 @@
 // src/components/JobSearch.js
 import React, { useState } from "react";
 
-function JobSearch({ onSearchComplete, userSettings }) {
+function JobSearch({ onSearchComplete, userSettings, userId }) {
   const [keywords, setKeywords] = useState("");
   const [location, setLocation] = useState("");
   const [filters, setFilters] = useState({
@@ -66,12 +66,14 @@ function JobSearch({ onSearchComplete, userSettings }) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-User-ID": userId // Added user authentication
         },
         body: JSON.stringify({
           keywords,
           location,
           filters,
-          max_jobs: maxJobs
+          max_jobs: maxJobs,
+          headless: true // Default to headless mode
         }),
       });
 

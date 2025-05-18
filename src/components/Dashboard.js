@@ -12,6 +12,7 @@ function Dashboard() {
   const { currentUser, getUserSettings } = useAuth();
   const navigate = useNavigate();
   const [userSettings, setUserSettings] = useState(null);
+  const [systemStatus, setSystemStatus] = useState(null);
 
   useEffect(() => {
     if (!currentUser) {
@@ -25,8 +26,24 @@ function Dashboard() {
         const settings = await getUserSettings();
         setUserSettings(settings);
 
+        // Check system status
+        const statusResponse = await fetch("http://localhost:8000/api/status", {
+          headers: {
+            "X-User-ID": currentUser.uid
+          }
+        });
+
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          setSystemStatus(statusData);
+        }
+
         // Fetch jobs from JobTrak API
-        const response = await fetch("http://localhost:8000/api/jobs?limit=20&offset=0");
+        const response = await fetch("http://localhost:8000/api/jobs?limit=100&offset=0", {
+          headers: {
+            "X-User-ID": currentUser.uid // Add user ID to request
+          }
+        });
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -45,7 +62,12 @@ function Dashboard() {
   }, [currentUser, navigate, getUserSettings]);
 
   const handleSearchComplete = (newJobs) => {
-    setJobs(prevJobs => [...newJobs, ...prevJobs]);
+    setJobs(prevJobs => {
+      // Add only jobs that don't already exist in the list
+      const existingJobIds = new Set(prevJobs.map(job => job.id));
+      const uniqueNewJobs = newJobs.filter(job => !existingJobIds.has(job.id));
+      return [...uniqueNewJobs, ...prevJobs];
+    });
   };
 
   if (loading) {
@@ -67,17 +89,29 @@ function Dashboard() {
           </div>
         )}
 
+        {systemStatus && systemStatus.status !== "ok" && (
+          <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 mb-4 rounded" role="alert">
+            <span className="font-bold">System Status: </span>
+            <span className="block sm:inline">{systemStatus.message || "The system is experiencing issues."}</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1">
-            <JobSearch onSearchComplete={handleSearchComplete} userSettings={userSettings} />
+            <JobSearch
+              onSearchComplete={handleSearchComplete}
+              userSettings={userSettings}
+              userId={currentUser.uid}
+            />
           </div>
 
           <div className="lg:col-span-2">
-            <JobList jobs={jobs} />
+            <JobList jobs={jobs} userId={currentUser.uid} />
           </div>
         </div>
       </main>
     </div>
   );
 }
+
 export default Dashboard;
