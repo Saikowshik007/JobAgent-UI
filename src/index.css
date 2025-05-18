@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles can be added below */
+body {
+  @apply bg-gray-50;
+}
+
+.prose img {
+  @apply mx-auto rounded-lg shadow-md;
+}
+
+.prose a {
+  @apply text-indigo-600 hover:text-indigo-500;
+}
