@@ -1,6 +1,7 @@
 import React, { useState } from "react";
+import { jobsApi } from "../utils/api";
 
-function JobDetail({ job, onStatusChange, userId }) {
+function JobDetail({ job, onStatusChange }) {
   const [generatingResume, setGeneratingResume] = useState(false);
   const [resumeError, setResumeError] = useState("");
   const [resumeMessage, setResumeMessage] = useState("");
@@ -24,28 +25,12 @@ function JobDetail({ job, onStatusChange, userId }) {
       setResumeError("");
       setResumeMessage("");
 
-      const response = await fetch("http://localhost:8000/api/resume/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-ID": userId
-        },
-        body: JSON.stringify({
-          job_id: job.id,
-          customize: true
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      // Use API client instead of direct fetch
+      await jobsApi.generateResume(job.id, true);
       setResumeMessage("Resume generated successfully!");
 
       // Update job status to RESUME_GENERATED
       onStatusChange(job.id, "RESUME_GENERATED");
-
     } catch (error) {
       setResumeError("Failed to generate resume: " + error.message);
     } finally {
@@ -59,29 +44,41 @@ function JobDetail({ job, onStatusChange, userId }) {
       setResumeError("");
       setResumeMessage("");
 
-      const response = await fetch("http://localhost:8000/api/resume/upload-to-simplify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-ID": userId
-        },
-        body: JSON.stringify({
-          job_id: job.id
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      // Use API client instead of direct fetch
+      await jobsApi.uploadToSimplify(job.id);
       setResumeMessage("Resume uploaded to Simplify successfully!");
-
     } catch (error) {
       setResumeError("Failed to upload to Simplify: " + error.message);
     } finally {
       setUploadingToSimplify(false);
     }
+  };
+
+  // Extract date posted from metadata if it exists
+  const getDatePosted = () => {
+    if (job.metadata && job.metadata.date_posted) {
+      return job.metadata.date_posted;
+    }
+    return "Not specified";
+  };
+
+  // Extract job type from metadata if it exists
+  const getJobType = () => {
+    if (job.metadata && job.metadata.employment_type) {
+      return job.metadata.employment_type;
+    }
+    if (job.metadata && job.metadata.job_type) {
+      return job.metadata.job_type;
+    }
+    return "Not specified";
+  };
+
+  // Determine if job is Easy Apply
+  const isEasyApply = () => {
+    if (job.metadata && job.metadata.is_easy_apply) {
+      return job.metadata.is_easy_apply === true ? "Yes" : "No";
+    }
+    return "No";
   };
 
   return (
@@ -113,26 +110,22 @@ function JobDetail({ job, onStatusChange, userId }) {
           </div>
           <div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
             <dt className="text-sm font-medium text-gray-500">Job Type</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{job.job_type || "Not specified"}</dd>
+            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{getJobType()}</dd>
           </div>
           <div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
             <dt className="text-sm font-medium text-gray-500">Date Posted</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-              {job.date_posted ? new Date(job.date_posted).toLocaleDateString() : "Not specified"}
-            </dd>
+            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{getDatePosted()}</dd>
           </div>
           <div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
             <dt className="text-sm font-medium text-gray-500">Easy Apply</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-              {job.easy_apply ? "Yes" : "No"}
-            </dd>
+            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{isEasyApply()}</dd>
           </div>
           <div className="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
             <dt className="text-sm font-medium text-gray-500">LinkedIn URL</dt>
             <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-              {job.url ? (
+              {job.linkedin_url ? (
                 <a
-                  href={job.url}
+                  href={job.linkedin_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-indigo-600 hover:text-indigo-500"
@@ -206,11 +199,11 @@ function JobDetail({ job, onStatusChange, userId }) {
           className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           onClick={() => {
             onStatusChange(job.id, "APPLIED");
-            window.open(job.url, '_blank');
+            window.open(job.job_url, '_blank');
           }}
-          disabled={!job.url}
+          disabled={!job.job_url}
         >
-          Apply on LinkedIn
+          Apply
         </button>
       </div>
     </div>

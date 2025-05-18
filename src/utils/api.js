@@ -1,51 +1,67 @@
+// Debug-focused API client
 import { auth } from '../firebase/firebase';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
 
-// Helper function to get the current user's ID token for authentication
-async function getAuthToken() {
-  const user = auth.currentUser;
-  if (!user) {
-    return null;
+// Helper to log headers for debugging
+function logHeaders(headers) {
+  console.log("API Request Headers:");
+  for (const [key, value] of Object.entries(headers)) {
+    console.log(`  ${key}: ${value}`);
   }
-  return await user.getIdToken();
 }
 
 // Generic API request function with authentication
 async function apiRequest(endpoint, options = {}) {
-  const token = await getAuthToken();
+  const user = auth.currentUser;
+
+  // Debug output
+  console.log(`Making request to ${endpoint}`);
+  console.log(`Current user:`, user ? `${user.uid} (authenticated)` : 'No user (unauthenticated)');
+
+  if (!user) {
+    console.warn("No authenticated user! Request will use default user_id on server.");
+  }
 
   const headers = {
     'Content-Type': 'application/json',
-    ...(token && { 'Authorization': `Bearer ${token}` }),
+    ...(user && { 'x_user_id': user.uid }),
     ...options.headers
   };
+
+  // Log headers for debugging
+  logHeaders(headers);
 
   const config = {
     ...options,
     headers
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+  try {
+    console.log(`Sending request to ${API_BASE_URL}${endpoint}`);
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    console.log(`Response status: ${response.status} ${response.statusText}`);
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(
-      errorData?.detail ||
-      `API request failed with status ${response.status}: ${response.statusText}`
-    );
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      throw new Error(
+        errorData?.detail ||
+        `API request failed with status ${response.status}: ${response.statusText}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`API request to ${endpoint} failed:`, error);
+    throw error;
   }
-
-  return await response.json();
 }
+
 // Job-related API functions
 export const jobsApi = {
-  // Search for jobs on LinkedIn
-  search: (searchParams) => {
-    return apiRequest('/api/jobs/search', {
-      method: 'POST',
-      body: JSON.stringify(searchParams)
-    });
+  // Get system status
+  getSystemStatus: () => {
+    return apiRequest('/api/status');
   },
 
   // Get all jobs with optional filtering
@@ -60,41 +76,9 @@ export const jobsApi = {
 
     return apiRequest(`/api/jobs?${queryParams.toString()}`);
   },
-
-  // Get a specific job by ID
-  getJob: (jobId) => {
-    return apiRequest(`/api/jobs/${jobId}`);
-  },
-
-  // Update the status of a job
-  updateStatus: (jobId, status) => {
-    return apiRequest(`/api/jobs/${jobId}/status`, {
-      method: 'PUT',
-      body: JSON.stringify({ status })
-    });
-  },
-
-  // Generate a resume for a job (placeholder)
-  generateResume: (jobId, resumeData) => {
-    return apiRequest(`/api/resume/generate`, {
-      method: 'POST',
-      body: JSON.stringify({
-        job_id: jobId,
-        ...resumeData
-      })
-    });
-  }
 };
 
-// System-related API functions
-export const systemApi = {
-  // Get system status and job statistics
-  getStatus: () => {
-    return apiRequest('/api/status');
-  }
-};
-
+// Export for convenience
 export default {
-  jobs: jobsApi,
-  system: systemApi
+  jobs: jobsApi
 };

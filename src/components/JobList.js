@@ -40,7 +40,7 @@ function JobList({ jobs, userId }) {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "X-User-ID": userId // Added user authentication
+          "x_user_id": userId // Added user authentication
         },
         body: JSON.stringify({
           status: newStatus

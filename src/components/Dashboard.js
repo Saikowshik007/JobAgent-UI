@@ -1,3 +1,4 @@
+// Updated Dashboard.js with improved authentication checking
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -26,10 +27,9 @@ function Dashboard() {
         const settings = await getUserSettings();
         setUserSettings(settings);
 
-        // Check system status
         const statusResponse = await fetch("http://localhost:8000/api/status", {
           headers: {
-            "X-User-ID": currentUser.uid
+            "x_user_id": currentUser.uid // Log to verify this header is being set
           }
         });
 
@@ -38,10 +38,11 @@ function Dashboard() {
           setSystemStatus(statusData);
         }
 
-        // Fetch jobs from JobTrak API
+        // Fetch jobs from JobTrak API - log to verify header
+        console.log("Fetching jobs with user ID:", currentUser.uid);
         const response = await fetch("http://localhost:8000/api/jobs?limit=100&offset=0", {
           headers: {
-            "X-User-ID": currentUser.uid // Add user ID to request
+            "x_user_id": currentUser.uid
           }
         });
 
@@ -58,7 +59,12 @@ function Dashboard() {
       }
     }
 
-    fetchData();
+    // Make sure currentUser is fully loaded before making requests
+    if (currentUser.uid) {
+      fetchData();
+    } else {
+      setError("User authentication not complete. Please wait or refresh.");
+    }
   }, [currentUser, navigate, getUserSettings]);
 
   const handleSearchComplete = (newJobs) => {
@@ -89,7 +95,7 @@ function Dashboard() {
           </div>
         )}
 
-        {systemStatus && systemStatus.status !== "ok" && (
+        {systemStatus && systemStatus.status !== "online" && (
           <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 mb-4 rounded" role="alert">
             <span className="font-bold">System Status: </span>
             <span className="block sm:inline">{systemStatus.message || "The system is experiencing issues."}</span>
