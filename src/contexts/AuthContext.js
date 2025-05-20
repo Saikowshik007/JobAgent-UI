@@ -18,15 +18,16 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  async function signup(email, password, linkedinEmail, linkedinPassword, openaiApiKey) {
+  // Updated signup function without LinkedIn credentials
+  async function signup(email, password, openaiApiKey = "") {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
 
-      // Store LinkedIn credentials and other config in Firestore
+      // Store configuration in Firestore without LinkedIn credentials
       await setDoc(doc(db, "users", userCredential.user.uid), {
-        linkedinEmail,
-        linkedinPassword,
+        email,
         openaiApiKey,
+        createdAt: new Date().toISOString(),
         settings: {
           selenium: {
             headless: true
@@ -67,7 +68,10 @@ export function AuthProvider({ children }) {
   async function updateUserSettings(settings) {
     if (!currentUser) return;
     const userRef = doc(db, "users", currentUser.uid);
-    await setDoc(userRef, settings, { merge: true });
+    await setDoc(userRef, {
+      ...settings,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
   }
 
   useEffect(() => {

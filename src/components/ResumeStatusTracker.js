@@ -1,104 +1,69 @@
 import React, { useState, useEffect } from 'react';
-import { resumeApi } from '../utils/api';
+import { jobsApi } from '../utils/api';
+import { useAuth } from "../contexts/AuthContext";
+import { db } from "../firebase/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import ResumeYamlModal from './ResumeYamlModal';
 
 function ResumeStatusTracker({ resumeId, onComplete }) {
   const [status, setStatus] = useState('generating');
-  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState('Resume generation in progress...');
   const [error, setError] = useState(null);
-  const [resumeData, setResumeData] = useState(null);
+  const [pollingComplete, setPollingComplete] = useState(false);
 
   useEffect(() => {
-    if (!resumeId) return;
+    let isMounted = true;
+    let pollingTimeout;
 
     const checkStatus = async () => {
       try {
-        const data = await resumeApi.getResumeStatus(resumeId);
-        setResumeData(data);
+        // Use the improved polling method to reduce API calls
+        const statusData = await jobsApi.resumeApi.pollResumeStatus(resumeId);
 
-        if (data.status === 'completed') {
-          setStatus('completed');
-          setProgress(100);
-          if (onComplete) onComplete(data);
-        } else if (data.status === 'error') {
-          setStatus('error');
-          setError(data.message || 'An error occurred during resume generation');
-        } else {
-          // Still generating, update progress as estimate
-          setProgress((prev) => Math.min(prev + 10, 90));
+        if (!isMounted) return;
+
+        setStatus(statusData.status);
+        setMessage('Resume generated successfully!');
+        setPollingComplete(true);
+
+        if (statusData.status === 'completed' && onComplete) {
+          onComplete(statusData);
         }
-      } catch (err) {
+      } catch (error) {
+        if (!isMounted) return;
+
+        console.error('Error checking resume status:', error);
         setStatus('error');
-        setError(err.message || 'Failed to check resume status');
+        setError(error.message || 'An error occurred while generating your resume.');
+        setPollingComplete(true);
       }
     };
 
-    // Initial check
     checkStatus();
 
-    // Set up polling interval
-    const interval = setInterval(checkStatus, 2000);
-
-    // Clear interval on unmount or when complete
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearTimeout(pollingTimeout);
+    };
   }, [resumeId, onComplete]);
 
-  const handleDownload = (format) => {
-    if (status === 'completed' && resumeId) {
-      resumeApi.downloadResume(resumeId, format);
-    }
-  };
-
   return (
-    <div className="mt-4 p-4 border rounded-md bg-gray-50">
-      <h3 className="text-lg font-medium text-gray-900 mb-2">Resume Generation</h3>
-
-      {/* Progress indicator */}
-      <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
-        <div
-          className={`h-2.5 rounded-full ${status === 'error' ? 'bg-red-600' : 'bg-blue-600'}`}
-          style={{ width: `${progress}%` }}
-        ></div>
+    <div className="space-y-2">
+      <div className="flex items-center">
+        {!pollingComplete && (
+          <div className="mr-2 animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-indigo-500"></div>
+        )}
+        <h3 className="text-md font-medium">Resume Status: {status}</h3>
       </div>
 
-      {/* Status message */}
-      <div className="text-sm mb-4">
-        {status === 'generating' && (
-          <p className="text-blue-700">
-            <span className="inline-block mr-2 h-4 w-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
-            Generating your resume... This may take up to a minute.
-          </p>
-        )}
+      {error ? (
+        <div className="text-red-600">{error}</div>
+      ) : (
+        <div className="text-gray-600">{message}</div>
+      )}
 
-        {status === 'completed' && (
-          <p className="text-green-700">
-            Resume generated successfully!
-          </p>
-        )}
-
-        {status === 'error' && (
-          <p className="text-red-700">
-            {error || 'An error occurred during resume generation.'}
-          </p>
-        )}
-      </div>
-
-      {/* Download buttons (only show when complete) */}
       {status === 'completed' && (
-        <div className="flex space-x-3">
-          <button
-            onClick={() => handleDownload('pdf')}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            Download PDF
-          </button>
-
-          <button
-            onClick={() => handleDownload('yaml')}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            Download YAML
-          </button>
-        </div>
+        <div className="text-green-600">Resume is now ready! You can view or download it below.</div>
       )}
     </div>
   );

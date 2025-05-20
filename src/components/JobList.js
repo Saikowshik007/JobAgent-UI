@@ -20,12 +20,37 @@ function JobList({ jobs, userId }) {
     { value: "DECLINED", label: "Declined" }
   ];
 
+  // Helper function to safely get job display properties
+  const getJobTitle = (job) => {
+    return job.title || job.metadata?.job_title || "Untitled Position";
+  };
+
+  const getJobCompany = (job) => {
+    return job.company || job.metadata?.company || "Unknown Company";
+  };
+
+  const getJobLocation = (job) => {
+    return job.location ||
+           (job.metadata?.is_fully_remote ? "Remote" : job.metadata?.location) ||
+           null;
+  };
+
+  const getJobDate = (job) => {
+    return job.date_posted || job.metadata?.date_posted || job.date_found || null;
+  };
+
   const filteredJobs = jobs.filter(job => {
+    if (!job) return false;
+
+    const title = getJobTitle(job);
+    const company = getJobCompany(job);
+    const location = getJobLocation(job);
+
     const matchesStatus = statusFilter === "ALL" || job.status === statusFilter;
-    const matchesSearch =
-      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (job.location && job.location.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSearch = searchQuery === "" ||
+      (title && title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (company && company.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (location && location.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return matchesStatus && matchesSearch;
   });
@@ -105,51 +130,58 @@ function JobList({ jobs, userId }) {
             </div>
           ) : (
             <ul className="divide-y divide-gray-200 max-h-[600px] overflow-y-auto">
-              {filteredJobs.map((job) => (
-                <li
-                  key={job.id}
-                  className={`px-4 py-4 sm:px-6 hover:bg-gray-50 cursor-pointer ${
-                    selectedJob && selectedJob.id === job.id ? "bg-indigo-50" : ""
-                  }`}
-                  onClick={() => handleJobClick(job)}
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-indigo-600 truncate">{job.title}</p>
-                    <div className="ml-2 flex-shrink-0 flex">
-                      <p className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        job.status === "NEW" ? "bg-gray-100 text-gray-800" :
-                        job.status === "INTERESTED" ? "bg-blue-100 text-blue-800" :
-                        job.status === "RESUME_GENERATED" ? "bg-purple-100 text-purple-800" :
-                        job.status === "APPLIED" ? "bg-yellow-100 text-yellow-800" :
-                        job.status === "INTERVIEW" ? "bg-purple-100 text-purple-800" :
-                        job.status === "OFFER" ? "bg-green-100 text-green-800" :
-                        job.status === "REJECTED" ? "bg-red-100 text-red-800" :
-                        job.status === "DECLINED" ? "bg-orange-100 text-orange-800" :
-                        "bg-gray-100 text-gray-800"
-                      }`}>
-                        {job.status || "NEW"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-2 sm:flex sm:justify-between">
-                    <div className="sm:flex">
-                      <p className="flex items-center text-sm text-gray-500">
-                        {job.company}
-                      </p>
-                      {job.location && (
-                        <p className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
-                          {job.location}
+              {filteredJobs.map((job) => {
+                const title = getJobTitle(job);
+                const company = getJobCompany(job);
+                const location = getJobLocation(job);
+                const date = getJobDate(job);
+
+                return (
+                  <li
+                    key={job.id}
+                    className={`px-4 py-4 sm:px-6 hover:bg-gray-50 cursor-pointer ${
+                      selectedJob && selectedJob.id === job.id ? "bg-indigo-50" : ""
+                    }`}
+                    onClick={() => handleJobClick(job)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-indigo-600 truncate">{title}</p>
+                      <div className="ml-2 flex-shrink-0 flex">
+                        <p className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          job.status === "NEW" ? "bg-gray-100 text-gray-800" :
+                          job.status === "INTERESTED" ? "bg-blue-100 text-blue-800" :
+                          job.status === "RESUME_GENERATED" ? "bg-purple-100 text-purple-800" :
+                          job.status === "APPLIED" ? "bg-yellow-100 text-yellow-800" :
+                          job.status === "INTERVIEW" ? "bg-purple-100 text-purple-800" :
+                          job.status === "OFFER" ? "bg-green-100 text-green-800" :
+                          job.status === "REJECTED" ? "bg-red-100 text-red-800" :
+                          job.status === "DECLINED" ? "bg-orange-100 text-orange-800" :
+                          "bg-gray-100 text-gray-800"
+                        }`}>
+                          {job.status || "NEW"}
                         </p>
-                      )}
+                      </div>
                     </div>
-                    <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
-                      <p>
-                        {job.date_posted ? new Date(job.date_posted).toLocaleDateString() : "Recent"}
-                      </p>
+                    <div className="mt-2 sm:flex sm:justify-between">
+                      <div className="sm:flex">
+                        <p className="flex items-center text-sm text-gray-500">
+                          {company}
+                        </p>
+                        {location && (
+                          <p className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
+                            {location}
+                          </p>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
+                        <p>
+                          {date ? new Date(date).toLocaleDateString() : "Recent"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
