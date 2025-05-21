@@ -1,0 +1,20 @@
+# Development Dockerfile for JobAgent-UI with hot reloading
+
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and package-lock.json if it exists
+COPY package.json package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# We don't copy the application code here as we'll be mounting it as a volume
+
+# Expose port that React dev server uses
+EXPOSE 3000
+
+# Start React in development mode with hot reloading
+CMD ["npm", "start"]

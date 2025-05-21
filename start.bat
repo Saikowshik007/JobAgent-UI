@@ -1,0 +1,3 @@
+@echo off
+echo Starting JobAgent-UI development environment with hot reloading...
+docker-compose -f docker-compose.yml up --build

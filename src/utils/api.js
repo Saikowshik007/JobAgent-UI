@@ -25,10 +25,14 @@ async function apiRequest(endpoint, options = {}) {
   }
 
   const headers = {
-    'Content-Type': 'application/json',
-    ...(user && { 'x_user_id': user.uid }),
-    ...options.headers
+    ...(options.headers || {}),
+    ...(user && { 'x_user_id': user.uid })
   };
+
+  // Don't set Content-Type for FormData requests as it will be set automatically with boundary
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   // Log headers for debugging
   logHeaders(headers);
@@ -168,7 +172,39 @@ export const resumeApi = {
         resume_id: resumeId
       })
     });
-  }
+  },
+
+  async saveResumeYaml(resumeId, yamlContent) {
+    try {
+      const formData = new FormData();
+      formData.append('yaml_content', yamlContent);
+
+      const user = auth.currentUser;
+      const headers = {
+        ...(user && { 'x_user_id': user.uid })
+      };
+
+      const response = await fetch(`${API_BASE_URL}/api/resume/${resumeId}/update-yaml`, {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          errorData?.detail ||
+          `API request failed with status ${response.status}: ${response.statusText}`
+        );
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error saving resume YAML:`, error);
+      throw error;
+    }
+  },
+
 };
 
 // Job-related API functions
@@ -196,6 +232,10 @@ export const jobsApi = {
     return apiRequest(`/api/jobs/${jobId}`);
   },
 
+  saveResumeYaml: (resumeId, yamlContent) => {
+    return resumeApi.saveResumeYaml(resumeId, yamlContent);
+  },
+
   // Update job status
   updateJobStatus: (jobId, status) => {
     return apiRequest(`/api/jobs/${jobId}/status`, {
@@ -220,5 +260,20 @@ export const jobsApi = {
 
   getResumeStatus: (resumeId) => {
     return resumeApi.getResumeStatus(resumeId);
+  },
+
+  // NEW METHOD: Add a job by URL
+  addJobByUrl: (jobUrl, apiKey) => {
+    // Create FormData object as the API expects form data, not JSON
+    const formData = new FormData();
+    formData.append('job_url', jobUrl);
+
+    return apiRequest('/api/jobs/analyze', {
+      method: 'POST',
+      headers: {
+        'X-Api-Key': apiKey
+      },
+      body: formData
+    });
   }
 };
