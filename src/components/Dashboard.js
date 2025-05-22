@@ -6,6 +6,7 @@ import JobSearch from "./JobSearch";
 import JobList from "./JobList";
 import JobDetail from "./JobDetail";
 import Navbar from "./Navbar";
+import Footer from "./Footer";
 import { jobsApi } from "../utils/api";
 
 function Dashboard() {
@@ -103,10 +104,10 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 flex flex-col">
       <Navbar />
 
-      <main className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <main className="container mx-auto py-6 px-4 sm:px-6 lg:px-8 flex-grow">
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 mb-4 rounded" role="alert">
             <span className="block sm:inline">{error}</span>
@@ -176,6 +177,8 @@ function Dashboard() {
           </div>
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }
