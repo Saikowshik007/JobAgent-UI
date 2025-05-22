@@ -927,7 +927,18 @@ function Settings() {
                   <div className="border-b border-gray-200 py-5">
                     <h4 className="text-md font-medium text-gray-800">Education</h4>
                     {resumeData.education.map((school, schoolIndex) => (
-                      <div key={schoolIndex} className="mt-4 p-4 border border-gray-200 rounded-md">
+                      <div key={schoolIndex} className="mt-4 p-4 border border-gray-200 rounded-md relative">
+                        {resumeData.education.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeEducation(schoolIndex)}
+                            className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
                         <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 sm:gap-x-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700">
@@ -943,7 +954,18 @@ function Settings() {
                         </div>
 
                         {school.degrees.map((degree, degreeIndex) => (
-                          <div key={degreeIndex} className="mt-4 pl-4 border-l-2 border-gray-200">
+                          <div key={degreeIndex} className="mt-4 pl-4 border-l-2 border-gray-200 relative">
+                            {school.degrees.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeDegree(schoolIndex, degreeIndex)}
+                                className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
                             <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 sm:gap-x-4">
                               <div>
                                 <label className="block text-sm font-medium text-gray-700">
@@ -1224,7 +1246,18 @@ function Settings() {
                   <div className="pt-5">
                     <h4 className="text-md font-medium text-gray-800">Skills</h4>
                     {resumeData.skills.map((skillCat, catIndex) => (
-                      <div key={catIndex} className="mt-4 p-4 border border-gray-200 rounded-md">
+                      <div key={catIndex} className="mt-4 p-4 border border-gray-200 rounded-md relative">
+                        {resumeData.skills.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeSkillCategory(catIndex)}
+                            className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
                         <div>
                           <label className="block text-sm font-medium text-gray-700">
                             Skill Category
@@ -1244,14 +1277,18 @@ function Settings() {
                           </label>
                           <div className="mt-2 grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-2">
                             {skillCat.skills.map((skill, skillIndex) => (
-                              <input
-                                key={skillIndex}
-                                type="text"
-                                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-                                value={skill}
-                                onChange={(e) => handleSkillChange(catIndex, skillIndex, e.target.value)}
-                                placeholder="Enter a skill"
-                              />
+                              <div key={skillIndex} className="flex items-center">
+                                <input
+                                  type="text"
+                                  className="focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+                                  value={skill}
+                                  onChange={(e) => handleSkillChange(catIndex, skillIndex, e.target.value)}
+                                  placeholder="Enter a skill"
+                                />
+                                {skillCat.skills.length > 1 && (
+                                  <DeleteButton onClick={() => removeSkill(catIndex, skillIndex)} />
+                                )}
+                              </div>
                             ))}
                           </div>
                           <button
