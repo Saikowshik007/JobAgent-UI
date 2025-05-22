@@ -206,10 +206,10 @@ const handleViewResume = async () => {
     // Create a URL for the PDF download
     const user = auth.currentUser;
     const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://70.113.134.201';
-    const yamlUrl = `${baseUrl}/api/resume/${resumeId}/download?format=yaml`;
+    const pdfUrl = `${baseUrl}/api/resume/${resumeId}/download?format=pdf`;
 
     // Add user authentication header by creating a temporary form
-    const response = await fetch(yamlUrl, {
+    const response = await fetch(pdfUrl, {
       method: 'GET',
       headers: {
         ...(user && { 'x_user_id': user.uid })
@@ -484,7 +484,7 @@ const handleViewResumeNotFound = () => {
                 {viewingResume ? (
                   <>
                     <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-gray-700 rounded-full"></span>
-                    Loading...
+                    Loading Resume...
                   </>
                 ) : (
                   <>
@@ -492,18 +492,9 @@ const handleViewResumeNotFound = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
-                    View Resume
+                    View/Edit Resume
                   </>
                 )}
-              </button>
-              <button
-                onClick={() => setShowYamlModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Edit Resume
               </button>
             </div>
           </div>
@@ -569,7 +560,28 @@ const handleViewResumeNotFound = () => {
           yamlContent={resumeYaml}
           onSave={handleSaveYaml}
           onClose={() => setShowYamlModal(false)}
+          readOnly={false} // Always allow editing for now
         />
+      )}
+
+      {/* Handle case where YAML modal is opened but YAML is not loaded yet */}
+      {showYamlModal && !resumeYaml && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mr-3"></div>
+              <span className="text-gray-700">Loading resume content...</span>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setShowYamlModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Action Buttons */}
