@@ -161,6 +161,7 @@ const fetchResumeYaml = async () => {
 
 const handleResumeComplete = async (resumeData) => {
   setResumeMessage('Resume generated successfully!');
+  setShowStatusTracker(false); // Hide the status tracker to stop polling
 
   // Only update status if it's not already RESUME_GENERATED
   if (job.status !== 'RESUME_GENERATED') {

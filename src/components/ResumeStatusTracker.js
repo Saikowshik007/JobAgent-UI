@@ -1,5 +1,5 @@
 // src/components/ResumeStatusTracker.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { jobsApi } from '../utils/api';
 
 function ResumeStatusTracker({ resumeId, onComplete }) {
@@ -7,6 +7,8 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
   const [message, setMessage] = useState('Starting resume generation...');
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
+  const intervalRefs = useRef({ status: null, progress: null });
+  const isMounted = useRef(true);
 
   useEffect(() => {
     if (!resumeId) {
@@ -14,19 +16,18 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
       return;
     }
 
-    let isMounted = true;
-    let statusCheckInterval;
-    let progressUpdateInterval;
+    // Reset mounted flag when component mounts
+    isMounted.current = true;
 
-    // Manual implementation of status polling to avoid any issues with API client
+    // Manual implementation of status polling
     const checkStatus = async () => {
       try {
-        if (!isMounted) return;
+        if (!isMounted.current) return;
 
-        // Use the direct method instead of the polling method
+        console.log('Checking resume status for:', resumeId);
         const statusData = await jobsApi.getResumeStatus(resumeId);
 
-        if (!isMounted) return;
+        if (!isMounted.current) return;
 
         console.log('Resume status:', statusData);
 
@@ -36,11 +37,17 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
           setMessage('Resume generated successfully!');
 
           // Clear intervals once completed
-          clearInterval(statusCheckInterval);
-          clearInterval(progressUpdateInterval);
+          if (intervalRefs.current.status) {
+            clearInterval(intervalRefs.current.status);
+            intervalRefs.current.status = null;
+          }
+          if (intervalRefs.current.progress) {
+            clearInterval(intervalRefs.current.progress);
+            intervalRefs.current.progress = null;
+          }
 
           // Notify parent component
-          if (onComplete && isMounted) {
+          if (onComplete && isMounted.current) {
             onComplete(statusData);
           }
         } else if (statusData.status === 'error') {
@@ -48,7 +55,14 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
           setError(`Resume generation failed: ${statusData.message || 'Unknown error'}`);
 
           // Clear intervals on error
-          clearInterval(statusCheckInterval);
+          if (intervalRefs.current.status) {
+            clearInterval(intervalRefs.current.status);
+            intervalRefs.current.status = null;
+          }
+          if (intervalRefs.current.progress) {
+            clearInterval(intervalRefs.current.progress);
+            intervalRefs.current.progress = null;
+          }
         } else {
           // Still in progress, update message if available
           if (statusData.message) {
@@ -56,26 +70,27 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
           }
         }
       } catch (error) {
-        if (!isMounted) return;
+        if (!isMounted.current) return;
 
         console.error('Error checking resume status:', error);
         setStatus('error');
         setError(`Failed to check resume status: ${error.message}`);
 
         // Clear intervals on error
-        clearInterval(statusCheckInterval);
+        if (intervalRefs.current.status) {
+          clearInterval(intervalRefs.current.status);
+          intervalRefs.current.status = null;
+        }
+        if (intervalRefs.current.progress) {
+          clearInterval(intervalRefs.current.progress);
+          intervalRefs.current.progress = null;
+        }
       }
     };
 
-    // Initial check
-    checkStatus();
-
-    // Set up polling at regular intervals (every 3 seconds)
-    statusCheckInterval = setInterval(checkStatus, 3000);
-
-    // Define progress update interval (for UI purposes)
-    progressUpdateInterval = setInterval(() => {
-      if (!isMounted) return;
+    // Progress update function
+    const updateProgress = () => {
+      if (!isMounted.current) return;
 
       setProgress(prevProgress => {
         // Only increment progress if we're still processing
@@ -84,15 +99,40 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
         }
         return prevProgress;
       });
-    }, 2000);
-
-    // Clean up
-    return () => {
-      isMounted = false;
-      clearInterval(statusCheckInterval);
-      clearInterval(progressUpdateInterval);
     };
-  }, [resumeId, onComplete, status]);
+
+    // Initial check
+    checkStatus();
+
+    // Set up polling at regular intervals (every 3 seconds)
+    intervalRefs.current.status = setInterval(checkStatus, 3000);
+
+    // Set up progress updates (every 2 seconds)
+    intervalRefs.current.progress = setInterval(updateProgress, 2000);
+
+    // Clean up function
+    return () => {
+      console.log('ResumeStatusTracker cleanup - stopping polling');
+      isMounted.current = false;
+
+      if (intervalRefs.current.status) {
+        clearInterval(intervalRefs.current.status);
+        intervalRefs.current.status = null;
+      }
+      if (intervalRefs.current.progress) {
+        clearInterval(intervalRefs.current.progress);
+        intervalRefs.current.progress = null;
+      }
+    };
+  }, [resumeId, onComplete]);
+
+  // Additional cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log('ResumeStatusTracker unmounting');
+      isMounted.current = false;
+    };
+  }, []);
 
   return (
     <div className="p-4 border rounded-md bg-gray-50">
@@ -101,7 +141,7 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
       {/* Progress bar */}
       <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
         <div
-          className={`h-2.5 rounded-full ${
+          className={`h-2.5 rounded-full transition-all duration-300 ${
             status === 'error' ? 'bg-red-600' :
             status === 'completed' ? 'bg-green-600' : 'bg-indigo-600'
           }`}
