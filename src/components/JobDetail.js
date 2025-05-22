@@ -19,6 +19,7 @@ function JobDetail({ job, onStatusChange }) {
   const [expandedDescription, setExpandedDescription] = useState(false);
   const { currentUser, getUserSettings } = useAuth();
   const fetchingYaml = useRef(false);
+  const yamlFetched = useRef(false); // Track if we've already fetched YAML for this resume
 
   // Fetch user's resume data when component mounts
   useEffect(() => {
@@ -42,22 +43,46 @@ function JobDetail({ job, onStatusChange }) {
     fetchUserResume();
   }, [currentUser]);
 
-  // Fetch resume YAML if resumeId is available and status is RESUME_GENERATED
+  // Reset YAML fetch tracking when resumeId changes (new resume)
   useEffect(() => {
-    if (resumeId && job.status === 'RESUME_GENERATED' && !resumeYaml) {
+    if (resumeId !== job.resume_id) {
+      setResumeId(job.resume_id || null);
+      yamlFetched.current = false;
+      setResumeYaml(null);
+    }
+  }, [job.resume_id]);
+
+  // Only fetch resume YAML once when conditions are met
+  useEffect(() => {
+    if (resumeId &&
+        job.status === 'RESUME_GENERATED' &&
+        !resumeYaml &&
+        !yamlFetched.current &&
+        !fetchingYaml.current) {
       fetchResumeYaml();
     }
-  }, [resumeId, job.status]);
+  }, [resumeId, resumeYaml]); // Removed job.status from dependencies
 
 const fetchResumeYaml = async () => {
+  if (fetchingYaml.current || yamlFetched.current) {
+    return; // Prevent duplicate calls
+  }
+
   try {
+    fetchingYaml.current = true;
+    console.log('Fetching resume YAML for resumeId:', resumeId);
+
     const yamlContent = await jobsApi.getResumeYaml(resumeId);
-    if (yamlContent) {  // Only update state if we got valid content
+    if (yamlContent) {
       setResumeYaml(yamlContent);
+      yamlFetched.current = true; // Mark as fetched
+      console.log('Resume YAML fetched successfully');
     }
   } catch (error) {
     console.error('Error fetching resume YAML:', error);
     setResumeError(`Failed to fetch resume YAML: ${error.message}`);
+  } finally {
+    fetchingYaml.current = false;
   }
 };
 
@@ -80,6 +105,7 @@ const fetchResumeYaml = async () => {
       setResumeMessage('');
       setShowStatusTracker(false);
       setResumeYaml(null);
+      yamlFetched.current = false; // Reset YAML fetch tracking
 
       // Check if we have user resume data
       if (!userResumeData) {
@@ -139,13 +165,11 @@ const handleResumeComplete = async (resumeData) => {
   // Only update status if it's not already RESUME_GENERATED
   if (job.status !== 'RESUME_GENERATED') {
     onStatusChange(job.id, 'RESUME_GENERATED');
-    // No need to fetch YAML here, the useEffect will handle it
-    // after the status changes to RESUME_GENERATED
-  } else {
-    // If status is already RESUME_GENERATED but we don't have YAML yet
-    if (!resumeYaml) {
-      await fetchResumeYaml();
-    }
+  }
+
+  // Fetch YAML if we haven't already
+  if (!resumeYaml && !yamlFetched.current) {
+    await fetchResumeYaml();
   }
 };
 
