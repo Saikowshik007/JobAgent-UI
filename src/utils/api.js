@@ -26,7 +26,7 @@ async function apiRequest(endpoint, options = {}) {
 
   const headers = {
     ...(options.headers || {}),
-    ...(user && { 'x_user_id': user.uid })
+    ...(user && { 'X-User-Id': user.uid })
   };
 
   // Don't set Content-Type for FormData requests as it will be set automatically with boundary
