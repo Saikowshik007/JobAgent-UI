@@ -421,7 +421,7 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
           </div>
         </div>
         {/* Resume section */}
-        {resumeId && job.status === 'RESUME_GENERATED' && (
+        {resumeId && (job.status === 'RESUME_GENERATED' || job.status === 'APPLIED' || job.status === 'INTERVIEW' || job.status === 'OFFER' || job.status === 'REJECTED' || job.status === 'DECLINED') && (
           <div className="mt-6 border-t border-gray-200 pt-4">
             <h4 className="text-sm font-medium text-gray-500 mb-2">Resume</h4>
             <div className="flex">
