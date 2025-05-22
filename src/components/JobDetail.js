@@ -206,10 +206,10 @@ const handleViewResume = async () => {
     // Create a URL for the PDF download
     const user = auth.currentUser;
     const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://70.113.134.201';
-    const pdfUrl = `${baseUrl}/api/resume/${resumeId}/download?format=pdf`;
+    const yamlUrl = `${baseUrl}/api/resume/${resumeId}/download?format=yaml`;
 
     // Add user authentication header by creating a temporary form
-    const response = await fetch(pdfUrl, {
+    const response = await fetch(yamlUrl, {
       method: 'GET',
       headers: {
         ...(user && { 'x_user_id': user.uid })
