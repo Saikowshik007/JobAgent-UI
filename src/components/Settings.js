@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import Navbar from "./Navbar";
+import Footer from "./Footer";
 import yaml from "js-yaml";
 
 function Settings() {
@@ -461,6 +462,123 @@ function Settings() {
     });
   };
 
+  // Delete button component for consistency
+  const DeleteButton = ({ onClick }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center justify-center w-6 h-6 ml-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full"
+      title="Remove"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  );
+
+  // Remove functions
+  const removeWebsite = (index) => {
+    setResumeData(prev => {
+      const websites = [...prev.basic.websites];
+      websites.splice(index, 1);
+      return {
+        ...prev,
+        basic: {
+          ...prev.basic,
+          websites
+        }
+      };
+    });
+  };
+
+  const removeEducation = (schoolIndex) => {
+    setResumeData(prev => {
+      const schools = [...prev.education];
+      schools.splice(schoolIndex, 1);
+      return {
+        ...prev,
+        education: schools
+      };
+    });
+  };
+
+  const removeDegree = (schoolIndex, degreeIndex) => {
+    setResumeData(prev => {
+      const schools = [...prev.education];
+      schools[schoolIndex].degrees.splice(degreeIndex, 1);
+      return {
+        ...prev,
+        education: schools
+      };
+    });
+  };
+
+  const removeExperience = (expIndex) => {
+    setResumeData(prev => {
+      const experiences = [...prev.experiences];
+      experiences.splice(expIndex, 1);
+      return {
+        ...prev,
+        experiences
+      };
+    });
+  };
+
+  const removeHighlight = (expIndex, highlightIndex) => {
+    setResumeData(prev => {
+      const experiences = [...prev.experiences];
+      experiences[expIndex].highlights.splice(highlightIndex, 1);
+      return {
+        ...prev,
+        experiences
+      };
+    });
+  };
+
+  const removeProject = (projIndex) => {
+    setResumeData(prev => {
+      const projects = [...prev.projects];
+      projects.splice(projIndex, 1);
+      return {
+        ...prev,
+        projects
+      };
+    });
+  };
+
+  const removeProjectHighlight = (projIndex, highlightIndex) => {
+    setResumeData(prev => {
+      const projects = [...prev.projects];
+      projects[projIndex].highlights.splice(highlightIndex, 1);
+      return {
+        ...prev,
+        projects
+      };
+    });
+  };
+
+  const removeSkillCategory = (catIndex) => {
+    setResumeData(prev => {
+      const skills = [...prev.skills];
+      skills.splice(catIndex, 1);
+      return {
+        ...prev,
+        skills
+      };
+    });
+  };
+
+  const removeSkill = (catIndex, skillIndex) => {
+    setResumeData(prev => {
+      const skills = [...prev.skills];
+      skills[catIndex].skills.splice(skillIndex, 1);
+      return {
+        ...prev,
+        skills
+      };
+    });
+  };
+
   // Export resume as YAML
   const exportResumeYaml = () => {
     try {
@@ -512,20 +630,21 @@ function Settings() {
 
   if (loading && !resumeData.basic.name) {
     return (
-      <div className="min-h-screen bg-gray-100">
+      <div className="min-h-screen bg-gray-100 flex flex-col">
         <Navbar />
-        <div className="flex justify-center items-center h-64">
+        <div className="flex justify-center items-center h-64 flex-grow">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
         </div>
+        <Footer />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 flex flex-col">
       <Navbar />
 
-      <main className="container mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <main className="container mx-auto py-8 px-4 sm:px-6 lg:px-8 flex-grow">
         <div className="bg-white shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
             <h2 className="text-2xl font-bold text-gray-900">User Settings</h2>
@@ -765,7 +884,7 @@ function Settings() {
                         Websites/Profiles
                       </label>
                       {resumeData.basic.websites.map((website, index) => (
-                        <div key={index} className="flex mt-2">
+                        <div key={index} className="flex items-center mt-2">
                           <input
                             type="text"
                             className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
@@ -773,6 +892,9 @@ function Settings() {
                             onChange={(e) => handleWebsiteChange(index, e.target.value)}
                             placeholder="https://yourwebsite.com"
                           />
+                          {resumeData.basic.websites.length > 1 && (
+                            <DeleteButton onClick={() => removeWebsite(index)} />
+                          )}
                         </div>
                       ))}
                       <button
@@ -801,7 +923,7 @@ function Settings() {
                     </div>
                   </div>
 
-                  {/* Education */}
+{/* Education */}
                   <div className="border-b border-gray-200 py-5">
                     <h4 className="text-md font-medium text-gray-800">Education</h4>
                     {resumeData.education.map((school, schoolIndex) => (
@@ -887,7 +1009,18 @@ function Settings() {
                   <div className="border-b border-gray-200 py-5">
                     <h4 className="text-md font-medium text-gray-800">Work Experience</h4>
                     {resumeData.experiences.map((exp, expIndex) => (
-                      <div key={expIndex} className="mt-4 p-4 border border-gray-200 rounded-md">
+                      <div key={expIndex} className="mt-4 p-4 border border-gray-200 rounded-md relative">
+                        {resumeData.experiences.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeExperience(expIndex)}
+                            className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
                         <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 sm:gap-x-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700">
@@ -962,7 +1095,7 @@ function Settings() {
                             Highlights/Responsibilities
                           </label>
                           {exp.highlights.map((highlight, highlightIndex) => (
-                            <div key={highlightIndex} className="mt-2">
+                            <div key={highlightIndex} className="mt-2 flex items-center">
                               <textarea
                                 rows={2}
                                 className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full sm:text-sm border border-gray-300 rounded-md"
@@ -970,6 +1103,9 @@ function Settings() {
                                 onChange={(e) => handleHighlightChange(expIndex, highlightIndex, e.target.value)}
                                 placeholder="Describe an achievement or responsibility"
                               ></textarea>
+                              {exp.highlights.length > 1 && (
+                                <DeleteButton onClick={() => removeHighlight(expIndex, highlightIndex)} />
+                              )}
                             </div>
                           ))}
                           <button
@@ -996,7 +1132,18 @@ function Settings() {
                   <div className="border-b border-gray-200 py-5">
                     <h4 className="text-md font-medium text-gray-800">Projects</h4>
                     {resumeData.projects.map((project, projIndex) => (
-                      <div key={projIndex} className="mt-4 p-4 border border-gray-200 rounded-md">
+                      <div key={projIndex} className="mt-4 p-4 border border-gray-200 rounded-md relative">
+                        {resumeData.projects.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeProject(projIndex)}
+                            className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
                         <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 sm:gap-x-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700">
@@ -1040,7 +1187,7 @@ function Settings() {
                             Project Highlights
                           </label>
                           {project.highlights.map((highlight, highlightIndex) => (
-                            <div key={highlightIndex} className="mt-2">
+                            <div key={highlightIndex} className="mt-2 flex items-center">
                               <textarea
                                 rows={2}
                                 className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full sm:text-sm border border-gray-300 rounded-md"
@@ -1048,6 +1195,9 @@ function Settings() {
                                 onChange={(e) => handleProjectHighlightChange(projIndex, highlightIndex, e.target.value)}
                                 placeholder="Describe what you accomplished with this project"
                               ></textarea>
+                              {project.highlights.length > 1 && (
+                                <DeleteButton onClick={() => removeProjectHighlight(projIndex, highlightIndex)} />
+                              )}
                             </div>
                           ))}
                           <button
@@ -1141,6 +1291,8 @@ function Settings() {
           </form>
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }
