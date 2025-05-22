@@ -17,6 +17,7 @@ function JobDetail({ job, onStatusChange }) {
   const [resumeYaml, setResumeYaml] = useState(null);
   const [showYamlModal, setShowYamlModal] = useState(false);
   const [expandedDescription, setExpandedDescription] = useState(false);
+  const [fetchingYamlForModal, setFetchingYamlForModal] = useState(false); // New state for modal fetch
   const { currentUser, getUserSettings } = useAuth();
   const fetchingYaml = useRef(false);
   const yamlFetched = useRef(false); // Track if we've already fetched YAML for this resume
@@ -85,6 +86,40 @@ const fetchResumeYaml = async () => {
     fetchingYaml.current = false;
   }
 };
+
+  // New function to handle View/Edit Resume button click
+  const handleViewEditResume = async () => {
+    try {
+      // If we already have the YAML, just show the modal
+      if (resumeYaml) {
+        setShowYamlModal(true);
+        return;
+      }
+
+      // If we don't have the YAML, fetch it first
+      if (resumeId && !fetchingYamlForModal) {
+        setFetchingYamlForModal(true);
+        setResumeError('');
+
+        console.log('Fetching resume YAML for modal, resumeId:', resumeId);
+
+        const yamlContent = await jobsApi.getResumeYaml(resumeId);
+        if (yamlContent) {
+          setResumeYaml(yamlContent);
+          yamlFetched.current = true;
+          setShowYamlModal(true);
+          console.log('Resume YAML fetched successfully for modal');
+        } else {
+          setResumeError('Failed to fetch resume content');
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching resume YAML for modal:', error);
+      setResumeError(`Failed to fetch resume: ${error.message}`);
+    } finally {
+      setFetchingYamlForModal(false);
+    }
+  };
 
   // Updated to match the API's JobStatusEnum values
   const statusOptions = [
@@ -426,10 +461,18 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
             <h4 className="text-sm font-medium text-gray-500 mb-2">Resume</h4>
             <div className="flex">
               <button
-                onClick={() => setShowYamlModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+                onClick={handleViewEditResume}
+                disabled={fetchingYamlForModal}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                View/Edit Resume
+                {fetchingYamlForModal ? (
+                  <>
+                    <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></span>
+                    Loading Resume...
+                  </>
+                ) : (
+                  "View/Edit Resume"
+                )}
               </button>
             </div>
           </div>
@@ -466,8 +509,8 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
         </div>
       )}
 
-      {/* Resume YAML Modal */}
-      {showYamlModal && resumeYaml && (
+      {/* Resume YAML Modal - Updated condition to show modal even if YAML is being fetched */}
+      {showYamlModal && (
         <ResumeYamlModal
           yamlContent={resumeYaml}
           onSave={handleSaveYaml}
