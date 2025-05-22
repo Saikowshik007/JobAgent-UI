@@ -181,7 +181,7 @@ export const resumeApi = {
 
       const user = auth.currentUser;
       const headers = {
-        ...(user && { 'x_user_id': user.uid })
+        ...(user && { 'X-User-Id': user.uid })
       };
 
       const response = await fetch(`${API_BASE_URL}/api/resume/${resumeId}/update-yaml`, {
