@@ -206,10 +206,10 @@ const handleViewResume = async () => {
     // Create a URL for the PDF download
     const user = auth.currentUser;
     const baseUrl = process.env.REACT_APP_API_BASE_URL || 'https://70.113.134.201';
-    const yamlUrl = `${baseUrl}/api/resume/${resumeId}/download?format=yaml`;
+    const pdfUrl = `${baseUrl}/api/resume/${resumeId}/download?format=pdf`;
 
     // Add user authentication header by creating a temporary form
-    const response = await fetch(yamlUrl, {
+    const response = await fetch(pdfUrl, {
       method: 'GET',
       headers: {
         ...(user && { 'x_user_id': user.uid })
@@ -560,28 +560,7 @@ const handleViewResumeNotFound = () => {
           yamlContent={resumeYaml}
           onSave={handleSaveYaml}
           onClose={() => setShowYamlModal(false)}
-          readOnly={false} // Always allow editing for now
         />
-      )}
-
-      {/* Handle case where YAML modal is opened but YAML is not loaded yet */}
-      {showYamlModal && !resumeYaml && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mr-3"></div>
-              <span className="text-gray-700">Loading resume content...</span>
-            </div>
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setShowYamlModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Action Buttons */}
