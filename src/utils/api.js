@@ -2,7 +2,7 @@
 
 import { auth } from '../firebase/firebase';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://70.113.134.201';
 
 // Helper to log headers for debugging
 function logHeaders(headers) {
