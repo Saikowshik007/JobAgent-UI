@@ -193,7 +193,7 @@ export const resumeApi = {
 
   // Get resume status - with polling limitation to prevent API spamming
   getResumeStatus(resumeId) {
-    return apiRequest(`/api/resume/${resumeId}/status`);
+    return apiRequest('/api/resume/${resumeId}/status');
   },
 
   // Add a polling mechanism with delay to prevent API spamming
@@ -371,7 +371,7 @@ export const jobsApi = {
 export const simplifyApi = {
   // Store session data for a user
   storeSession: (sessionData) => {
-    return simplifyApiRequest('/api/simplify/store-session', {
+    return apiRequest('/api/simplify/store-session', {
       method: 'POST',
       body: JSON.stringify(sessionData)
     });
@@ -379,7 +379,7 @@ export const simplifyApi = {
 
   // Upload resume to Simplify using stored session
   uploadResume: (resumeId, jobId = null) => {
-    return simplifyApiRequest('/api/simplify/upload-resume', {
+    return apiRequest('/api/simplify/upload-resume', {
       method: 'POST',
       body: JSON.stringify({
         resume_id: resumeId,
@@ -390,6 +390,6 @@ export const simplifyApi = {
 
   // Check if user has valid session
   checkSession: () => {
-    return simplifyApiRequest('/api/simplify/check-session');
+    return apiRequest('/api/simplify/check-session');
   }
 };
