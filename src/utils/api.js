@@ -1,4 +1,4 @@
-// src/utils/api.js - Updated API client
+// src/utils/api.js - Updated with fixed Simplify API calls
 
 import { auth } from '../firebase/firebase';
 
@@ -58,6 +58,93 @@ async function apiRequest(endpoint, options = {}) {
     return await response.json();
   } catch (error) {
     console.error(`API request to ${endpoint} failed:`, error);
+    throw error;
+  }
+}
+
+// Special API request function for Simplify endpoints that handles empty responses
+async function simplifyApiRequest(endpoint, options = {}) {
+  const user = auth.currentUser;
+
+  console.log(`Making Simplify request to ${endpoint}`);
+  console.log(`Current user:`, user ? `${user.uid} (authenticated)` : 'No user (unauthenticated)');
+
+  if (!user) {
+    console.warn("No authenticated user! Request will use default user_id on server.");
+  }
+
+  const headers = {
+    ...(options.headers || {}),
+    ...(user && { 'X-User-Id': user.uid })
+  };
+
+  // Don't set Content-Type for FormData requests
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  logHeaders(headers);
+
+  const config = {
+    ...options,
+    headers
+  };
+
+  try {
+    console.log(`Sending request to ${API_BASE_URL}${endpoint}`);
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+
+    // Get response text first
+    const responseText = await response.text();
+    console.log(`Response text length: ${responseText.length}`);
+    console.log(`Response text: ${responseText}`);
+
+    if (!response.ok) {
+      let errorMessage = `API request failed with status ${response.status}: ${response.statusText}`;
+
+      if (responseText) {
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData?.detail || errorData?.message || errorMessage;
+        } catch (parseError) {
+          console.log('Failed to parse error response as JSON');
+          errorMessage = responseText || errorMessage;
+        }
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    // Handle empty response
+    if (!responseText || responseText.trim() === '') {
+      console.log('Empty response - assuming success');
+      return { message: 'Success', status: 'ok' };
+    }
+
+    // Try to parse as JSON
+    try {
+      const jsonData = JSON.parse(responseText);
+      console.log('Parsed JSON response:', jsonData);
+      return jsonData;
+    } catch (parseError) {
+      console.error('Failed to parse response as JSON:', parseError);
+      console.log('Raw response:', responseText);
+
+      // If response is successful but not JSON, return a success object
+      if (response.status >= 200 && response.status < 300) {
+        return {
+          message: 'Success',
+          status: 'ok',
+          raw_response: responseText
+        };
+      } else {
+        throw new Error('Invalid response format');
+      }
+    }
+
+  } catch (error) {
+    console.error(`Simplify API request to ${endpoint} failed:`, error);
     throw error;
   }
 }
@@ -277,10 +364,12 @@ export const jobsApi = {
     });
   }
 };
+
+// Updated Simplify API with special handling
 export const simplifyApi = {
   // Store session data for a user
   storeSession: (sessionData) => {
-    return apiRequest('/api/simplify/store-session', {
+    return simplifyApiRequest('/api/simplify/store-session', {
       method: 'POST',
       body: JSON.stringify(sessionData)
     });
@@ -288,7 +377,7 @@ export const simplifyApi = {
 
   // Upload resume to Simplify using stored session
   uploadResume: (resumeId, jobId = null) => {
-    return apiRequest('/api/simplify/upload-resume', {
+    return simplifyApiRequest('/api/simplify/upload-resume', {
       method: 'POST',
       body: JSON.stringify({
         resume_id: resumeId,
@@ -299,6 +388,6 @@ export const simplifyApi = {
 
   // Check if user has valid session
   checkSession: () => {
-    return apiRequest('/api/simplify/check-session');
+    return simplifyApiRequest('/api/simplify/check-session');
   }
 };
