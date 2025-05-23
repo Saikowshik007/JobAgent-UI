@@ -1,114 +1,63 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { simplifyApi } from '../utils/api';
 
 const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
-  const [loginWindow, setLoginWindow] = useState(null);
+  const [step, setStep] = useState(1);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
-  const [sessionCaptured, setSessionCaptured] = useState(false);
+  const [sessionData, setSessionData] = useState({
+    authorization: '',
+    csrf: '',
+    cookies: ''
+  });
   const { currentUser } = useAuth();
 
-  useEffect(() => {
-    // Listen for messages from the login window
-    const handleMessage = (event) => {
-      if (event.data.type === 'SIMPLIFY_COOKIES_CAPTURED') {
-        handleCookiesCaptured(event.data);
-      } else if (event.data.type === 'SIMPLIFY_COOKIES_ERROR') {
-        setError('Failed to capture cookies: ' + event.data.error);
-        setStatus('error');
-      }
-    };
+  const handleInputChange = (field, value) => {
+    setSessionData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
 
-    window.addEventListener('message', handleMessage);
+  const validateSession = () => {
+    if (!sessionData.authorization || !sessionData.csrf) {
+      setError('Please provide both authorization and CSRF tokens');
+      return false;
+    }
+    return true;
+  };
 
-    return () => {
-      window.removeEventListener('message', handleMessage);
-      if (loginWindow && !loginWindow.closed) {
-        loginWindow.close();
-      }
-    };
-  }, [loginWindow]);
+  const saveSession = async () => {
+    if (!validateSession()) return;
 
-  const handleCookiesCaptured = async (data) => {
+    setStatus('saving');
+    setError('');
+
     try {
-      const sessionData = {
-        cookies: data.cookies,
-        csrf_token: data.csrf_token,
-        captured_at: data.timestamp
-      };
-
       const response = await fetch('/api/simplify/store-session', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-User-Id': currentUser.uid
         },
-        body: JSON.stringify(sessionData)
+        body: JSON.stringify({
+          authorization: sessionData.authorization,
+          csrf_token: sessionData.csrf,
+          raw_cookies: sessionData.cookies,
+          captured_at: new Date().toISOString()
+        })
       });
 
       if (response.ok) {
-        setSessionCaptured(true);
-        setStatus('ready-to-upload');
-        setError('');
+        setStep(3);
+        setStatus('ready');
       } else {
-        throw new Error('Failed to store session');
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to save session');
       }
     } catch (err) {
-      setError('Failed to store session: ' + err.message);
-      setStatus('error');
-    }
-  };
-
-  const openSimplifyLogin = () => {
-    setStatus('logging-in');
-    setError('');
-
-    // Create a special login page that will capture cookies
-    const loginPageUrl = `${process.env.REACT_APP_API_BASE_URL}/simplify-login-helper`;
-
-    const newWindow = window.open(
-      loginPageUrl,
-      'simplify_login',
-      'width=1200,height=800,scrollbars=yes,resizable=yes'
-    );
-
-    setLoginWindow(newWindow);
-
-    // Monitor the window
-    const checkWindow = setInterval(() => {
-      if (newWindow.closed) {
-        clearInterval(checkWindow);
-        setStatus('idle');
-        setLoginWindow(null);
-      }
-    }, 1000);
-  };
-
-  const captureSession = async () => {
-    setStatus('capturing');
-    setError('');
-
-    try {
-      // This will capture cookies from the Simplify domain
-      // We'll need to implement this on the backend
-      const response = await fetch('/api/simplify/capture-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': currentUser.uid
-        }
-      });
-
-      if (response.ok) {
-        setSessionCaptured(true);
-        setStatus('ready-to-upload');
-      } else {
-        throw new Error('Failed to capture session');
-      }
-    } catch (err) {
-      setError('Failed to capture session: ' + err.message);
-      setStatus('error');
+      setError('Failed to save session: ' + err.message);
+      setStatus('idle');
     }
   };
 
@@ -117,9 +66,26 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     setError('');
 
     try {
-      const result = await simplifyApi.uploadResume(resumeId, jobId);
-      setStatus('success');
-      onUploadComplete?.(result);
+      const response = await fetch('/api/simplify/upload-resume', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser.uid
+        },
+        body: JSON.stringify({
+          resume_id: resumeId,
+          job_id: jobId
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setStatus('success');
+        onUploadComplete?.(result);
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Upload failed');
+      }
     } catch (err) {
       setError('Upload failed: ' + err.message);
       setStatus('error');
@@ -130,9 +96,9 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+      <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Upload Resume to Simplify</h3>
+          <h3 className="text-lg font-semibold">Upload Resume to Simplify Jobs</h3>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
@@ -143,92 +109,181 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
           </button>
         </div>
 
-        <div className="space-y-4">
-          {/* Step 1: Login */}
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-medium">Step 1: Login to Simplify</h4>
-              {status === 'logging-in' && (
-                <span className="text-blue-600 text-sm">In progress...</span>
-              )}
+        {/* Step Progress */}
+        <div className="flex items-center mb-6">
+          <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-300'} mr-3`}>
+            1
+          </div>
+          <div className={`flex-1 h-1 ${step >= 2 ? 'bg-blue-600' : 'bg-gray-300'} mr-3`}></div>
+          <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-300'} mr-3`}>
+            2
+          </div>
+          <div className={`flex-1 h-1 ${step >= 3 ? 'bg-blue-600' : 'bg-gray-300'} mr-3`}></div>
+          <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step >= 3 ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>
+            3
+          </div>
+        </div>
+
+        {/* Step 1: Login Instructions */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <h4 className="font-medium text-lg">Step 1: Login to Simplify Jobs</h4>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800 mb-3">
+                Please login to Simplify Jobs in a new tab, then come back here.
+              </p>
+              <button
+                onClick={() => window.open('https://simplify.jobs/auth/login', '_blank')}
+                className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Open Simplify Login (New Tab)
+              </button>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
-              Open Simplify Jobs and complete your login (including any CAPTCHA).
-            </p>
             <button
-              onClick={openSimplifyLogin}
-              disabled={status === 'logging-in'}
-              className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              onClick={() => setStep(2)}
+              className="w-full py-2 px-4 bg-green-600 text-white rounded hover:bg-green-700"
             >
-              {status === 'logging-in' ? 'Login Window Open...' : 'Open Simplify Login'}
+              I'm Logged In - Continue
             </button>
           </div>
+        )}
 
-          {/* Step 2: Capture Session */}
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-medium">Step 2: Capture Session</h4>
-              {sessionCaptured && (
-                <span className="text-green-600 text-sm">✓ Captured</span>
-              )}
+        {/* Step 2: Cookie Capture */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <h4 className="font-medium text-lg">Step 2: Capture Session Data</h4>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h5 className="font-medium text-yellow-800 mb-2">Instructions:</h5>
+              <ol className="text-sm text-yellow-800 space-y-1 ml-4 list-decimal">
+                <li>Go to Simplify Jobs tab (make sure you're logged in)</li>
+                <li>Press <kbd className="bg-gray-200 px-1 rounded">F12</kbd> to open Developer Tools</li>
+                <li>Go to <strong>Application</strong> tab → <strong>Cookies</strong> → <strong>https://simplify.jobs</strong></li>
+                <li>Find and copy these cookie values:</li>
+              </ol>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
-              After logging in, capture your session to enable uploads.
-            </p>
-            <button
-              onClick={captureSession}
-              disabled={status !== 'idle' || sessionCaptured}
-              className="w-full py-2 px-4 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-            >
-              {status === 'capturing' ? 'Capturing...' : sessionCaptured ? 'Session Captured' : 'Capture Session'}
-            </button>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Authorization Token*
+                </label>
+                <input
+                  type="text"
+                  placeholder="Find 'authorization' cookie and paste its value here"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  value={sessionData.authorization}
+                  onChange={(e) => handleInputChange('authorization', e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CSRF Token*
+                </label>
+                <input
+                  type="text"
+                  placeholder="Find 'csrf' cookie and paste its value here"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  value={sessionData.csrf}
+                  onChange={(e) => handleInputChange('csrf', e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  All Cookies (Optional - for better compatibility)
+                </label>
+                <textarea
+                  placeholder="Copy entire cookie string from Network tab request headers"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm h-20"
+                  value={sessionData.cookies}
+                  onChange={(e) => handleInputChange('cookies', e.target.value)}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  From Network tab, find any request to simplify.jobs, copy the Cookie header value
+                </p>
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setStep(1)}
+                className="flex-1 py-2 px-4 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+              >
+                Back
+              </button>
+              <button
+                onClick={saveSession}
+                disabled={status === 'saving' || !sessionData.authorization || !sessionData.csrf}
+                className="flex-1 py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {status === 'saving' ? 'Saving...' : 'Save Session'}
+              </button>
+            </div>
           </div>
+        )}
 
-          {/* Step 3: Upload */}
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-medium">Step 3: Upload Resume</h4>
-              {status === 'success' && (
-                <span className="text-green-600 text-sm">✓ Uploaded</span>
-              )}
-            </div>
-            <p className="text-sm text-gray-600 mb-3">
-              Upload your generated resume to Simplify Jobs.
-            </p>
-            <button
-              onClick={uploadResume}
-              disabled={!sessionCaptured || status === 'uploading' || status === 'success'}
-              className="w-full py-2 px-4 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {status === 'uploading' ? 'Uploading...' : status === 'success' ? 'Upload Complete!' : 'Upload Resume'}
-            </button>
-          </div>
+        {/* Step 3: Upload */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <h4 className="font-medium text-lg">Step 3: Upload Resume</h4>
 
-          {/* Error Display */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-red-700 text-sm">{error}</p>
-            </div>
-          )}
-
-          {/* Success Message */}
-          {status === 'success' && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-              <p className="text-green-700 text-sm">
-                Resume uploaded successfully to Simplify Jobs!
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-green-800">
+                ✓ Session captured successfully! Ready to upload your resume.
               </p>
             </div>
-          )}
-        </div>
 
-        <div className="mt-6 flex justify-end space-x-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
-          >
-            Close
-          </button>
-        </div>
+            <div className="bg-gray-50 border rounded-lg p-4">
+              <h5 className="font-medium mb-2">Upload Details:</h5>
+              <p className="text-sm text-gray-600">Resume ID: {resumeId}</p>
+              <p className="text-sm text-gray-600">Job ID: {jobId}</p>
+            </div>
+
+            <button
+              onClick={uploadResume}
+              disabled={status === 'uploading' || status === 'success'}
+              className="w-full py-3 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
+            >
+              {status === 'uploading' ? (
+                <>
+                  <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full inline-block"></span>
+                  Uploading Resume...
+                </>
+              ) : status === 'success' ? (
+                '✓ Upload Complete!'
+              ) : (
+                'Upload Resume to Simplify'
+              )}
+            </button>
+
+            {status !== 'success' && (
+              <button
+                onClick={() => setStep(2)}
+                className="w-full py-2 px-4 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+              >
+                Back to Edit Session
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Error Display */}
+        {error && (
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
+            <p className="text-red-700 text-sm">{error}</p>
+          </div>
+        )}
+
+        {/* Success Message */}
+        {status === 'success' && (
+          <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3">
+            <p className="text-green-700 text-sm">
+              🎉 Resume uploaded successfully to Simplify Jobs!
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
