@@ -1,8 +1,12 @@
 // src/utils/api.js - Client-side API calls
 import { auth } from '../firebase/firebase';
 
-// Use your public IP directly - API calls will come from user's browser
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://YOUR_PUBLIC_IP';
+// API Base URL - configured for DuckDNS
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? 'https://jobtrackai.duckdns.org'  // Your DuckDNS domain
+    : 'http://localhost:8000'           // Local development
+  );
 
 // Helper to log headers for debugging
 function logHeaders(headers) {
@@ -35,19 +39,23 @@ async function apiRequest(endpoint, options = {}) {
   }
 
   // Log headers for debugging
-  logHeaders(headers);
+  if (process.env.NODE_ENV === 'development') {
+    logHeaders(headers);
+  }
 
   const config = {
     ...options,
     headers,
     // Important: Ensure CORS requests are made from browser
     mode: 'cors',
-    credentials: 'include'
+    credentials: options.credentials || 'include'
   };
 
   try {
-    console.log(`Sending request to ${API_BASE_URL}${endpoint}`);
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    const fullUrl = `${API_BASE_URL}${endpoint}`;
+    console.log(`Sending request to ${fullUrl}`);
+
+    const response = await fetch(fullUrl, config);
     console.log(`Response status: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
@@ -61,8 +69,40 @@ async function apiRequest(endpoint, options = {}) {
     return await response.json();
   } catch (error) {
     console.error(`API request to ${endpoint} failed:`, error);
+
+    // Enhanced error handling for common issues
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      console.error('Network error - check if API server is running and accessible');
+      throw new Error('Unable to connect to API server. Please check your connection and try again.');
+    }
+
     throw error;
   }
+}
+
+// Enhanced retry logic for critical operations
+async function apiRequestWithRetry(endpoint, options = {}, maxRetries = 3) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await apiRequest(endpoint, options);
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on client errors (4xx)
+      if (error.message.includes('status 4')) {
+        throw error;
+      }
+
+      if (attempt < maxRetries) {
+        console.log(`Request failed, retrying (${attempt}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 // Rest of your API functions remain the same...
@@ -86,7 +126,7 @@ export const resumeApi = {
       console.warn("No resume data provided for job-specific customization");
     }
 
-    return apiRequest('/api/resume/generate', {
+    return apiRequestWithRetry('/api/resume/generate', {
       method: 'POST',
       headers: {
         'X-Api-Key': apiKey
@@ -246,7 +286,7 @@ export const jobsApi = {
     const formData = new FormData();
     formData.append('job_url', jobUrl);
 
-    return apiRequest('/api/jobs/analyze', {
+    return apiRequestWithRetry('/api/jobs/analyze', {
       method: 'POST',
       headers: {
         'X-Api-Key': apiKey
@@ -277,5 +317,20 @@ export const simplifyApi = {
 
   checkSession: () => {
     return apiRequest('/api/simplify/check-session');
+  }
+};
+
+// Health check function
+export const healthCheck = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/status`, {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'include'
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('Health check failed:', error);
+    return false;
   }
 };
