@@ -1,5 +1,8 @@
+// SimplifyUploadModal.js - Fixed to use the existing API pattern
+
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { simplifyApi } from '../utils/api'; // Import from your existing api.js
 
 const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
   const [step, setStep] = useState(1);
@@ -34,28 +37,31 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     setError('');
 
     try {
-      const response = await fetch('/api/simplify/store-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': currentUser.uid
-        },
-        body: JSON.stringify({
-          authorization: sessionData.authorization,
-          csrf_token: sessionData.csrf,
-          raw_cookies: sessionData.cookies,
-          captured_at: new Date().toISOString()
-        })
+      console.log('Saving session data via simplifyApi...');
+      
+      const requestData = {
+        authorization: sessionData.authorization,
+        csrf_token: sessionData.csrf,
+        raw_cookies: sessionData.cookies,
+        captured_at: new Date().toISOString()
+      };
+
+      console.log('Request data:', {
+        ...requestData,
+        authorization: requestData.authorization.substring(0, 20) + '...',
+        csrf_token: requestData.csrf_token.substring(0, 20) + '...'
       });
 
-      if (response.ok) {
-        setStep(3);
-        setStatus('ready');
-      } else {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to save session');
-      }
+      // Use the existing simplifyApi from api.js
+      const result = await simplifyApi.storeSession(requestData);
+      
+      console.log('Session stored successfully:', result);
+      setStep(3);
+      setStatus('ready');
+      setError('');
+      
     } catch (err) {
+      console.error('Save session error:', err);
       setError('Failed to save session: ' + err.message);
       setStatus('idle');
     }
@@ -66,29 +72,38 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     setError('');
 
     try {
-      const response = await fetch('/api/simplify/upload-resume', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': currentUser.uid
-        },
-        body: JSON.stringify({
-          resume_id: resumeId,
-          job_id: jobId
-        })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setStatus('success');
-        onUploadComplete?.(result);
-      } else {
-        const error = await response.json();
-        throw new Error(error.detail || 'Upload failed');
-      }
+      console.log('Uploading resume via simplifyApi...');
+      
+      // Use the existing simplifyApi from api.js
+      const result = await simplifyApi.uploadResume(resumeId, jobId);
+      
+      console.log('Upload successful:', result);
+      setStatus('success');
+      onUploadComplete?.(result);
+      
     } catch (err) {
+      console.error('Upload error:', err);
       setError('Upload failed: ' + err.message);
       setStatus('error');
+    }
+  };
+
+  // Test API connection function
+  const testApiConnection = async () => {
+    try {
+      console.log('Testing API connection...');
+      console.log('API_BASE_URL:', process.env.REACT_APP_API_BASE_URL);
+      console.log('Current user:', currentUser?.uid);
+      
+      // Test with a simple API call first
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/status`);
+      const data = await response.json();
+      console.log('API test response:', data);
+      alert('API connection successful!');
+      
+    } catch (error) {
+      console.error('API test failed:', error);
+      alert('API test failed: ' + error.message);
     }
   };
 
@@ -106,6 +121,21 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
+          </button>
+        </div>
+
+        {/* Debug Info */}
+        <div className="mb-4 p-3 bg-gray-100 rounded text-xs">
+          <p><strong>Debug Info:</strong></p>
+          <p>API Base URL: {process.env.REACT_APP_API_BASE_URL || 'NOT SET'}</p>
+          <p>User ID: {currentUser?.uid || 'NOT AUTHENTICATED'}</p>
+          <p>Resume ID: {resumeId}</p>
+          <p>Job ID: {jobId}</p>
+          <button
+            onClick={testApiConnection}
+            className="mt-2 px-2 py-1 bg-blue-500 text-white rounded text-xs"
+          >
+            Test API Connection
           </button>
         </div>
 
@@ -152,7 +182,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         {step === 2 && (
           <div className="space-y-4">
             <h4 className="font-medium text-lg">Step 2: Capture Session Data</h4>
-
+            
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <h5 className="font-medium text-yellow-800 mb-2">Instructions:</h5>
               <ol className="text-sm text-yellow-800 space-y-1 ml-4 list-decimal">
@@ -228,7 +258,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         {step === 3 && (
           <div className="space-y-4">
             <h4 className="font-medium text-lg">Step 3: Upload Resume</h4>
-
+            
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-green-800">
                 ✓ Session captured successfully! Ready to upload your resume.
