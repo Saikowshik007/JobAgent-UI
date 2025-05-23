@@ -5,8 +5,9 @@ import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import ResumeYamlModal from './ResumeYamlModal';
+import SimplifyJobActions from './SimplifyJobActions';
 
-function JobDetail({ job, onStatusChange }) {
+function JobDetail({ job, onStatusChange, isSimplifyConnected  }) {
   const [generatingResume, setGeneratingResume] = useState(false);
   const [resumeError, setResumeError] = useState('');
   const [resumeMessage, setResumeMessage] = useState('');
@@ -519,53 +520,66 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
       )}
 
       {/* Action Buttons */}
-      <div className="px-6 py-4 bg-gray-50 flex flex-wrap gap-3 justify-end rounded-b-lg">
-        <button
-          type="button"
-          className="flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          onClick={handleGenerateResume}
-          disabled={generatingResume || showStatusTracker || !userResumeData}
-        >
-          {generatingResume ? (
-            <>
-              <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></span>
-              Generating Resume...
-            </>
-          ) : (
-            "Generate Resume"
-          )}
-        </button>
+     <div className="px-6 py-4 bg-gray-50 flex flex-wrap gap-3 justify-end rounded-b-lg">
+             <button
+               type="button"
+               className="flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+               onClick={handleGenerateResume}
+               disabled={generatingResume || showStatusTracker || !userResumeData}
+             >
+               {generatingResume ? (
+                 <>
+                   <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></span>
+                   Generating Resume...
+                 </>
+               ) : (
+                 "Generate Resume"
+               )}
+             </button>
 
-        <button
-          type="button"
-          className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          onClick={handleUploadToSimplify}
-          disabled={uploadingToSimplify || job.status !== 'RESUME_GENERATED' || !resumeId}
-        >
-          {uploadingToSimplify ? (
-            <>
-              <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-gray-700 rounded-full"></span>
-              Uploading to Simplify...
-            </>
-          ) : (
-            "Upload to Simplify"
-          )}
-        </button>
+             <button
+               type="button"
+               className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+               onClick={handleUploadToSimplify}
+               disabled={uploadingToSimplify || job.status !== 'RESUME_GENERATED' || !resumeId}
+             >
+               {uploadingToSimplify ? (
+                 <>
+                   <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-gray-700 rounded-full"></span>
+                   Uploading to Simplify...
+                 </>
+               ) : (
+                 "Upload to Simplify"
+               )}
+             </button>
 
-        <button
-          type="button"
-          className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          onClick={() => {
-            onStatusChange(job.id, 'APPLIED');
-            window.open(job.job_url, '_blank');
-          }}
-          disabled={!job.job_url}
-        >
-          Apply
-        </button>
-      </div>
-    </div>
-  );
-}
+             <button
+               type="button"
+               className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+               onClick={() => {
+                 onStatusChange(job.id, 'APPLIED');
+                 window.open(job.job_url, '_blank');
+               }}
+               disabled={!job.job_url}
+             >
+               Apply
+             </button>
+           </div>
+
+           {/* SimplifyJobActions Component - Now properly placed inside the main div */}
+           <div className="px-6 pb-6">
+             <SimplifyJobActions
+               job={job}
+               isSimplifyConnected={isSimplifyConnected}
+               onActionComplete={(action) => {
+                 if (action === 'applied') {
+                   onStatusChange(job.id, 'APPLIED');
+                 }
+               }}
+             />
+           </div>
+         </div>
+       );
+     }
 
 export default JobDetail;
