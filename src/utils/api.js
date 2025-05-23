@@ -1,8 +1,8 @@
-// src/utils/api.js - Updated with fixed Simplify API calls
-
+// src/utils/api.js - Client-side API calls
 import { auth } from '../firebase/firebase';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
+// Use your public IP directly - API calls will come from user's browser
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://YOUR_PUBLIC_IP';
 
 // Helper to log headers for debugging
 function logHeaders(headers) {
@@ -18,7 +18,7 @@ async function apiRequest(endpoint, options = {}) {
 
   // Debug output
   console.log(`Making request to ${endpoint}`);
-  console.log(`Current user:`, user ? `${user.uid} (authenticated)` : 'No user (unauthenticated)');
+  console.log('Current user:', user ? `${user.uid} (authenticated)` : 'No user (unauthenticated)');
 
   if (!user) {
     console.warn("No authenticated user! Request will use default user_id on server.");
@@ -39,7 +39,10 @@ async function apiRequest(endpoint, options = {}) {
 
   const config = {
     ...options,
-    headers
+    headers,
+    // Important: Ensure CORS requests are made from browser
+    mode: 'cors',
+    credentials: 'include'
   };
 
   try {
@@ -62,119 +65,20 @@ async function apiRequest(endpoint, options = {}) {
   }
 }
 
-// Special API request function for Simplify endpoints that handles empty responses
-async function simplifyApiRequest(endpoint, options = {}) {
-  const user = auth.currentUser;
-
-  console.log(`Making Simplify request to ${endpoint}`);
-  console.log(`Current user:`, user ? `${user.uid} (authenticated)` : 'No user (unauthenticated)');
-
-  if (!user) {
-    console.warn("No authenticated user! Request will use default user_id on server.");
-  }
-
-  const headers = {
-    ...(options.headers || {}),
-    ...(user && { 'X-User-Id': user.uid })
-  };
-
-  // Don't set Content-Type for FormData requests
-  if (!(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  logHeaders(headers);
-
-  const config = {
-    ...options,
-    headers
-  };
-
-  try {
-    // FIX: Add the missing API_BASE_URL here
-    const fullUrl = `${API_BASE_URL}${endpoint}`;
-    console.log(`Sending request to ${fullUrl}`);
-    const response = await fetch(fullUrl, config);
-    console.log(`Response status: ${response.status} ${response.statusText}`);
-
-    // Get response text first
-    const responseText = await response.text();
-    console.log(`Response text length: ${responseText.length}`);
-    console.log(`Response text: ${responseText}`);
-
-    if (!response.ok) {
-      let errorMessage = `API request failed with status ${response.status}: ${response.statusText}`;
-
-      if (responseText) {
-        try {
-          const errorData = JSON.parse(responseText);
-          errorMessage = errorData?.detail || errorData?.message || errorMessage;
-        } catch (parseError) {
-          console.log('Failed to parse error response as JSON');
-          errorMessage = responseText || errorMessage;
-        }
-      }
-
-      throw new Error(errorMessage);
-    }
-
-    // Handle empty response
-    if (!responseText || responseText.trim() === '') {
-      console.log('Empty response - assuming success');
-      return { message: 'Success', status: 'ok' };
-    }
-
-    // Try to parse as JSON
-    try {
-      const jsonData = JSON.parse(responseText);
-      console.log('Parsed JSON response:', jsonData);
-      return jsonData;
-    } catch (parseError) {
-      console.error('Failed to parse response as JSON:', parseError);
-      console.log('Raw response:', responseText);
-
-      // If response is successful but not JSON, return a success object
-      if (response.status >= 200 && response.status < 300) {
-        return {
-          message: 'Success',
-          status: 'ok',
-          raw_response: responseText
-        };
-      } else {
-        throw new Error('Invalid response format');
-      }
-    }
-
-  } catch (error) {
-    console.error(`Simplify API request to ${endpoint} failed:`, error);
-    throw error;
-  }
-}
-
+// Rest of your API functions remain the same...
 export const resumeApi = {
-  /**
-   * Generate a tailored resume for a job
-   * @param {string} jobId - The ID of the job to generate resume for
-   * @param {object} settings - User settings containing the API key and resume data
-   * @param {boolean} customize - Whether to customize the resume for the job
-   * @param {string} template - Template to use (default: "standard")
-   * @returns {Promise<Object>} - Resume generation info
-   */
   generateResume(jobId, settings, customize = true, template = "standard") {
-    // Extract API key and resume data from settings
     const apiKey = settings?.openaiApiKey || "";
     const resumeData = settings?.resumeData || null;
 
     console.log(`Generating resume for job ${jobId} with resume data: ${resumeData ? 'Present' : 'Not provided'}`);
 
-    // Build request body
     const requestBody = {
       job_id: jobId,
       customize: customize,
       template: template
     };
 
-    // Include resume data if available
     if (resumeData) {
       requestBody.resume_data = resumeData;
       console.log("Including user's resume data in generation request");
@@ -191,21 +95,17 @@ export const resumeApi = {
     });
   },
 
-  // Get resume status - with polling limitation to prevent API spamming
   getResumeStatus(resumeId) {
-    return apiRequest('/api/resume/${resumeId}/status');
+    return apiRequest(`/api/resume/${resumeId}/status`);
   },
 
-  // Add a polling mechanism with delay to prevent API spamming
   async pollResumeStatus(resumeId, maxAttempts = 10, interval = 3000) {
     let attempts = 0;
     let lastStatus = null;
 
-    // Create a promise that resolves when resume generation is complete
     return new Promise((resolve, reject) => {
       const checkStatus = async () => {
         try {
-          // Don't make a request if we've reached max attempts
           if (attempts >= maxAttempts) {
             reject(new Error('Resume generation polling timed out'));
             return;
@@ -214,7 +114,6 @@ export const resumeApi = {
           const statusData = await this.getResumeStatus(resumeId);
           attempts++;
 
-          // Only log if status has changed to reduce console noise
           if (!lastStatus || lastStatus !== statusData.status) {
             console.log(`Resume status (attempt ${attempts}/${maxAttempts}): ${statusData.status}`);
             lastStatus = statusData.status;
@@ -230,19 +129,16 @@ export const resumeApi = {
             return;
           }
 
-          // If still generating, wait and check again
           setTimeout(checkStatus, interval);
         } catch (error) {
           reject(error);
         }
       };
 
-      // Start checking status
       checkStatus();
     });
   },
 
-  // Get YAML content only - no PDF download anymore
   async getResumeYaml(resumeId) {
     try {
       const response = await apiRequest(`/api/resume/${resumeId}/download?format=yaml`);
@@ -276,7 +172,9 @@ export const resumeApi = {
       const response = await fetch(`${API_BASE_URL}/api/resume/${resumeId}/update-yaml`, {
         method: 'POST',
         headers,
-        body: formData
+        body: formData,
+        mode: 'cors',
+        credentials: 'include'
       });
 
       if (!response.ok) {
@@ -293,17 +191,14 @@ export const resumeApi = {
       throw error;
     }
   },
-
 };
 
 // Job-related API functions
 export const jobsApi = {
-  // Get system status
   getSystemStatus: () => {
     return apiRequest('/api/status');
   },
 
-  // Get all jobs with optional filtering
   getJobs: (params = {}) => {
     const queryParams = new URLSearchParams();
 
@@ -316,7 +211,6 @@ export const jobsApi = {
     return apiRequest(`/api/jobs?${queryParams.toString()}`);
   },
 
-  // Get a specific job by ID
   getJob: (jobId) => {
     return apiRequest(`/api/jobs/${jobId}`);
   },
@@ -325,7 +219,6 @@ export const jobsApi = {
     return resumeApi.saveResumeYaml(resumeId, yamlContent);
   },
 
-  // Update job status
   updateJobStatus: (jobId, status) => {
     return apiRequest(`/api/jobs/${jobId}/status`, {
       method: 'PUT',
@@ -333,7 +226,6 @@ export const jobsApi = {
     });
   },
 
-  // Resume generation methods using resumeApi
   generateResume: (jobId, settings, customize = true, template = "standard") => {
     return resumeApi.generateResume(jobId, settings, customize, template);
   },
@@ -342,7 +234,6 @@ export const jobsApi = {
     return resumeApi.uploadToSimplify(jobId, resumeId);
   },
 
-  // Get YAML content only
   getResumeYaml: (resumeId) => {
     return resumeApi.getResumeYaml(resumeId);
   },
@@ -351,9 +242,7 @@ export const jobsApi = {
     return resumeApi.getResumeStatus(resumeId);
   },
 
-  // NEW METHOD: Add a job by URL
   addJobByUrl: (jobUrl, apiKey) => {
-    // Create FormData object as the API expects form data, not JSON
     const formData = new FormData();
     formData.append('job_url', jobUrl);
 
@@ -367,9 +256,8 @@ export const jobsApi = {
   }
 };
 
-// Updated Simplify API with special handling
+// Simplify API
 export const simplifyApi = {
-  // Store session data for a user
   storeSession: (sessionData) => {
     return apiRequest('/api/simplify/store-session', {
       method: 'POST',
@@ -377,7 +265,6 @@ export const simplifyApi = {
     });
   },
 
-  // Upload resume to Simplify using stored session
   uploadResume: (resumeId, jobId = null) => {
     return apiRequest('/api/simplify/upload-resume', {
       method: 'POST',
@@ -388,7 +275,6 @@ export const simplifyApi = {
     });
   },
 
-  // Check if user has valid session
   checkSession: () => {
     return apiRequest('/api/simplify/check-session');
   }
