@@ -4,27 +4,71 @@ import { simplifyApi } from '../utils/api';
 
 const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
   const [loginWindow, setLoginWindow] = useState(null);
-  const [status, setStatus] = useState('idle'); // idle, logging-in, capturing, uploading, success, error
+  const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
   const [sessionCaptured, setSessionCaptured] = useState(false);
   const { currentUser } = useAuth();
 
   useEffect(() => {
-    if (!isOpen) {
-      // Clean up when modal closes
+    // Listen for messages from the login window
+    const handleMessage = (event) => {
+      if (event.data.type === 'SIMPLIFY_COOKIES_CAPTURED') {
+        handleCookiesCaptured(event.data);
+      } else if (event.data.type === 'SIMPLIFY_COOKIES_ERROR') {
+        setError('Failed to capture cookies: ' + event.data.error);
+        setStatus('error');
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
       if (loginWindow && !loginWindow.closed) {
         loginWindow.close();
       }
+    };
+  }, [loginWindow]);
+
+  const handleCookiesCaptured = async (data) => {
+    try {
+      const sessionData = {
+        cookies: data.cookies,
+        csrf_token: data.csrf_token,
+        captured_at: data.timestamp
+      };
+
+      const response = await fetch('/api/simplify/store-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser.uid
+        },
+        body: JSON.stringify(sessionData)
+      });
+
+      if (response.ok) {
+        setSessionCaptured(true);
+        setStatus('ready-to-upload');
+        setError('');
+      } else {
+        throw new Error('Failed to store session');
+      }
+    } catch (err) {
+      setError('Failed to store session: ' + err.message);
+      setStatus('error');
     }
-  }, [isOpen, loginWindow]);
+  };
 
   const openSimplifyLogin = () => {
     setStatus('logging-in');
     setError('');
 
-    // Open Simplify login in new window
+    // Create a special login page that will capture cookies
+    const loginPageUrl = `${process.env.REACT_APP_API_BASE_URL}/simplify-login-helper`;
+
     const newWindow = window.open(
-      'https://simplify.jobs/auth/login',
+      loginPageUrl,
       'simplify_login',
       'width=1200,height=800,scrollbars=yes,resizable=yes'
     );
