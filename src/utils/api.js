@@ -2,7 +2,7 @@
 
 import { auth } from '../firebase/firebase';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://jobtrackai.ddns.net';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 // Helper to log headers for debugging
 function logHeaders(headers) {
