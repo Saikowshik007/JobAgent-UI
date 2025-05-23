@@ -91,8 +91,10 @@ async function simplifyApiRequest(endpoint, options = {}) {
   };
 
   try {
-    console.log(`Sending request to ${API_BASE_URL}${endpoint}`);
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    // FIX: Add the missing API_BASE_URL here
+    const fullUrl = `${API_BASE_URL}${endpoint}`;
+    console.log(`Sending request to ${fullUrl}`);
+    const response = await fetch(fullUrl, config);
     console.log(`Response status: ${response.status} ${response.statusText}`);
 
     // Get response text first

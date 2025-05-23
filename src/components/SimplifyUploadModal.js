@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { simplifyApi } from '../utils/api'; // Import from your existing api.js
+import { simplifyApi } from '../utils/api';
 
 const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
   const [step, setStep] = useState(1);
