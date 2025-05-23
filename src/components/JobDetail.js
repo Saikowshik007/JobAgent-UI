@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import ResumeYamlModal from './ResumeYamlModal';
+import SimplifyUploadModal from './SimplifyUploadModal';
 
 function JobDetail({ job, onStatusChange }) {
   const [generatingResume, setGeneratingResume] = useState(false);
@@ -21,6 +22,7 @@ function JobDetail({ job, onStatusChange }) {
   const { currentUser, getUserSettings } = useAuth();
   const fetchingYaml = useRef(false);
   const yamlFetched = useRef(false); // Track if we've already fetched YAML for this resume
+  const [showSimplifyModal, setShowSimplifyModal] = useState(false);
 
   // Fetch user's resume data when component mounts
   useEffect(() => {
@@ -178,21 +180,14 @@ const fetchResumeYaml = async () => {
     }
   };
 
-  const handleUploadToSimplify = async () => {
-    try {
-      setUploadingToSimplify(true);
-      setResumeError('');
-      setResumeMessage('');
+const handleUploadToSimplify = () => {
+  setShowSimplifyModal(true);
+};
+const handleSimplifyUploadComplete = (result) => {
+  setResumeMessage('Resume uploaded to Simplify successfully!');
+  setShowSimplifyModal(false);
+};
 
-      // Use the stored resumeId if available, otherwise let the API use job's default resume
-      await jobsApi.uploadToSimplify(job.id, resumeId);
-      setResumeMessage('Resume uploaded to Simplify successfully!');
-    } catch (error) {
-      setResumeError('Failed to upload to Simplify: ' + error.message);
-    } finally {
-      setUploadingToSimplify(false);
-    }
-  };
 
 const handleResumeComplete = async (resumeData) => {
   setResumeMessage('Resume generated successfully!');
@@ -477,6 +472,7 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
             </div>
           </div>
         )}
+
       </div>
 
       {/* Error/Success Messages */}
@@ -517,6 +513,15 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
           onClose={() => setShowYamlModal(false)}
         />
       )}
+        {showSimplifyModal && (
+          <SimplifyUploadModal
+            isOpen={showSimplifyModal}
+            onClose={() => setShowSimplifyModal(false)}
+            resumeId={resumeId}
+            jobId={job.id}
+            onUploadComplete={handleSimplifyUploadComplete}
+          />
+        )}
 
       {/* Action Buttons */}
      <div className="px-6 py-4 bg-gray-50 flex flex-wrap gap-3 justify-end rounded-b-lg">

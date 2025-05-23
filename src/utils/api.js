@@ -277,3 +277,28 @@ export const jobsApi = {
     });
   }
 };
+export const simplifyApi = {
+  // Store session data for a user
+  storeSession: (sessionData) => {
+    return apiRequest('/api/simplify/store-session', {
+      method: 'POST',
+      body: JSON.stringify(sessionData)
+    });
+  },
+
+  // Upload resume to Simplify using stored session
+  uploadResume: (resumeId, jobId = null) => {
+    return apiRequest('/api/simplify/upload-resume', {
+      method: 'POST',
+      body: JSON.stringify({
+        resume_id: resumeId,
+        job_id: jobId
+      })
+    });
+  },
+
+  // Check if user has valid session
+  checkSession: () => {
+    return apiRequest('/api/simplify/check-session');
+  }
+};
