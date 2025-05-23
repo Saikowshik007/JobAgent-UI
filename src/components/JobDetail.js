@@ -239,7 +239,7 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
   const team = metadata.team || null;
 
   // Get location from either top-level or determine from metadata
-  const location = job.location || (metadata.is_fully_remote ? "Remote" : "Not specified");
+  const location = job.location || (job.metadata?.is_fully_remote ? "Remote" : job.metadata?.location)
 
   // Format date string if available
   const formatDate = (dateString) => {
