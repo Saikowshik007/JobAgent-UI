@@ -5,9 +5,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import ResumeYamlModal from './ResumeYamlModal';
-import SimplifyJobActions from './SimplifyJobActions';
 
-function JobDetail({ job, onStatusChange, isSimplifyConnected  }) {
+function JobDetail({ job, onStatusChange }) {
   const [generatingResume, setGeneratingResume] = useState(false);
   const [resumeError, setResumeError] = useState('');
   const [resumeMessage, setResumeMessage] = useState('');
@@ -564,19 +563,6 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
              >
                Apply
              </button>
-           </div>
-
-           {/* SimplifyJobActions Component - Now properly placed inside the main div */}
-           <div className="px-6 pb-6">
-             <SimplifyJobActions
-               job={job}
-               isSimplifyConnected={isSimplifyConnected}
-               onActionComplete={(action) => {
-                 if (action === 'applied') {
-                   onStatusChange(job.id, 'APPLIED');
-                 }
-               }}
-             />
            </div>
          </div>
        );

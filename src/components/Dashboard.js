@@ -6,8 +6,7 @@ import JobList from "./JobList";
 import JobDetail from "./JobDetail";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
-import { jobsApi, simplifyApi } from "../utils/api";
-import SimplifyIntegration from './SimplifyIntegration';
+import { jobsApi } from "../utils/api";
 
 function Dashboard() {
   const [jobs, setJobs] = useState([]);
@@ -19,24 +18,6 @@ function Dashboard() {
   const navigate = useNavigate();
   const [userSettings, setUserSettings] = useState(null);
   const [systemStatus, setSystemStatus] = useState(null);
-  const [isSimplifyConnected, setIsSimplifyConnected] = useState(false);
-
-  useEffect(() => {
-    const checkSimplifyConnection = async () => {
-      try {
-        if (currentUser?.uid) {
-          const connection = await simplifyApi.checkConnection(currentUser.uid);
-          setIsSimplifyConnected(connection.has_session);
-        }
-      } catch (error) {
-        console.error('Error checking Simplify connection:', error);
-      }
-    };
-
-    if (currentUser?.uid) {
-      checkSimplifyConnection();
-    }
-  }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -144,12 +125,6 @@ function Dashboard() {
             <span className="block sm:inline">{systemStatus.message || "The system is experiencing issues."}</span>
           </div>
         )}
-
-        {/* Simplify Integration - Placed prominently after status messages */}
-        <SimplifyIntegration
-          onConnectionStatusChange={setIsSimplifyConnected}
-        />
-
         {/* Main Action Bar */}
         <div className="bg-white rounded-lg shadow mb-6 p-4 flex flex-col sm:flex-row justify-between items-center">
           <h1 className="text-xl font-bold text-gray-900 mb-4 sm:mb-0">Job Applications</h1>
@@ -191,7 +166,6 @@ function Dashboard() {
                 job={selectedJob}
                 onStatusChange={handleStatusChange}
                 userId={currentUser.uid}
-                isSimplifyConnected={isSimplifyConnected} // Pass the prop here
               />
             ) : (
               <div className="bg-white shadow rounded-lg p-6 flex items-center justify-center min-h-[200px]">
