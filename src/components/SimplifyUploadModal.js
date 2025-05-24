@@ -1,8 +1,137 @@
-// SimplifyUploadModal.js - Fixed to use the existing API pattern
+// SimplifyUploadModal.js - Generate PDF in UI and upload to Simplify
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { simplifyApi } from '../utils/api';
+import { simplifyApi, jobsApi } from '../utils/api';
+import { pdf } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Font, Link } from '@react-pdf/renderer';
+import yaml from 'js-yaml';
+
+// Register fonts for PDF generation (same as ResumeYamlModal)
+Font.register({
+  family: 'Calibri',
+  fonts: [
+    { src: '/fonts/calibri.ttf' },
+    { src: '/fonts/calibrib.ttf', fontWeight: 'bold' },
+    { src: '/fonts/calibrii.ttf', fontStyle: 'italic' },
+  ]
+});
+
+// PDF styles (same as ResumeYamlModal)
+const styles = StyleSheet.create({
+  page: {
+    paddingTop: 40,
+    paddingBottom: 40,
+    paddingHorizontal: 50,
+    fontSize: 10,
+    fontFamily: 'Calibri',
+    lineHeight: 1.3,
+  },
+  header: { fontSize: 13, textAlign: 'center', fontWeight: 'bold', marginBottom: 2, textTransform: 'uppercase' },
+  contact: { textAlign: 'center', fontSize: 9, marginBottom: 8 },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    marginTop: 8,
+    marginBottom: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: '#000000',
+    borderBottomStyle: 'solid',
+    paddingBottom: 1,
+  },
+  jobBlock: { marginBottom: 6 },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  jobTitle: { fontStyle: 'italic' },
+  bullet: { marginLeft: 10, marginBottom: 1 },
+  textNormal: { marginBottom: 3 },
+  projectTitle: { fontWeight: 'bold', color: 'blue', textDecoration: 'none' },
+});
+
+// PDF Document component (same as ResumeYamlModal)
+const ResumeDocument = ({ data }) => (
+  <Document>
+    <Page size="A4" style={styles.page}>
+      {data.basic && (
+        <>
+          <Text style={styles.header}>{data.basic.name}</Text>
+          <Text style={styles.contact}>
+            {[data.basic.email, data.basic.phone, ...(data.basic.websites || [])].filter(Boolean).join(' | ')}
+          </Text>
+        </>
+      )}
+
+      {data.objective && (
+        <>
+          <Text style={styles.sectionTitle}>Objective</Text>
+          <Text style={styles.textNormal}>{data.objective}</Text>
+        </>
+      )}
+
+      {data.experiences && (
+        <>
+          <Text style={styles.sectionTitle}>Experience</Text>
+          {data.experiences.map((exp, idx) => (
+            <View key={idx} style={styles.jobBlock}>
+              <View style={styles.row}>
+                <Text style={{ fontWeight: 'bold' }}>{exp.company}</Text>
+                <Text>{exp.titles?.[0]?.startdate} - {exp.titles?.[0]?.enddate}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.jobTitle}>{exp.titles?.[0]?.name}</Text>
+                <Text style={styles.jobTitle}>{exp.location}</Text>
+              </View>
+              {exp.highlights?.map((point, i) => (
+                <Text key={i} style={styles.bullet}>• {point}</Text>
+              ))}
+            </View>
+          ))}
+        </>
+      )}
+
+      {data.projects && (
+        <>
+          <Text style={styles.sectionTitle}>Projects</Text>
+          {data.projects.map((proj, idx) => (
+            <View key={idx} style={styles.jobBlock}>
+              {proj.link ? (
+                <Link src={proj.link} style={styles.projectTitle}>{proj.name}</Link>
+              ) : (
+                <Text style={{ fontWeight: 'bold' }}>{proj.name}</Text>
+              )}
+              {proj.highlights?.map((point, i) => (
+                <Text key={i} style={styles.bullet}>• {point}</Text>
+              ))}
+            </View>
+          ))}
+        </>
+      )}
+
+      {data.education && (
+        <>
+          <Text style={styles.sectionTitle}>Education</Text>
+          {data.education.map((edu, idx) => (
+            <View key={idx} style={styles.jobBlock}>
+              <View style={styles.row}>
+                <Text style={{ fontWeight: 'bold' }}>{edu.school}, {edu.degrees?.[0]?.names?.join(', ')}</Text>
+                <Text>{edu.degrees?.[0]?.dates}</Text>
+              </View>
+            </View>
+          ))}
+        </>
+      )}
+
+      {data.skills && (
+        <>
+          <Text style={styles.sectionTitle}>Skills</Text>
+          {data.skills.map((s, idx) => (
+            <Text key={idx}><Text style={{ fontWeight: 'bold' }}>{s.category}:</Text> {s.skills.join(', ')}</Text>
+          ))}
+        </>
+      )}
+    </Page>
+  </Document>
+);
 
 const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
   const [step, setStep] = useState(1);
@@ -13,7 +142,50 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     csrf: '',
     cookies: ''
   });
+  const [resumeData, setResumeData] = useState(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const { currentUser } = useAuth();
+
+  // Fetch resume data when modal opens
+  useEffect(() => {
+    if (isOpen && resumeId && !resumeData) {
+      fetchResumeData();
+    }
+  }, [isOpen, resumeId]);
+
+  const fetchResumeData = async () => {
+    try {
+      console.log('Fetching resume YAML for PDF generation...');
+      const yamlContent = await jobsApi.getResumeYaml(resumeId);
+
+      if (yamlContent) {
+        const parsed = yaml.load(yamlContent);
+        setResumeData(parsed);
+        console.log('Resume data loaded for PDF generation');
+      }
+    } catch (err) {
+      console.error('Failed to fetch resume data:', err);
+      setError('Failed to load resume data: ' + err.message);
+    }
+  };
+
+  const generatePdfBlob = async () => {
+    if (!resumeData) {
+      throw new Error('Resume data not available');
+    }
+
+    setGeneratingPdf(true);
+    console.log('Generating PDF from resume data...');
+
+    try {
+      // Generate PDF using the same component as ResumeYamlModal
+      const pdfBlob = await pdf(<ResumeDocument data={resumeData} />).toBlob();
+      console.log('PDF generated successfully, size:', pdfBlob.size, 'bytes');
+      return pdfBlob;
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
 
   const handleInputChange = (field, value) => {
     setSessionData(prev => ({
@@ -38,7 +210,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
 
     try {
       console.log('Saving session data via simplifyApi...');
-      
+
       const requestData = {
         authorization: sessionData.authorization,
         csrf_token: sessionData.csrf,
@@ -52,14 +224,13 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         csrf_token: requestData.csrf_token.substring(0, 20) + '...'
       });
 
-      // Use the existing simplifyApi from api.js
       const result = await simplifyApi.storeSession(requestData);
-      
+
       console.log('Session stored successfully:', result);
       setStep(3);
       setStatus('ready');
       setError('');
-      
+
     } catch (err) {
       console.error('Save session error:', err);
       setError('Failed to save session: ' + err.message);
@@ -72,15 +243,26 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     setError('');
 
     try {
-      console.log('Uploading resume via simplifyApi...');
-      
-      // Use the existing simplifyApi from api.js
-      const result = await simplifyApi.uploadResume(resumeId, jobId);
-      
+      // Step 1: Generate PDF
+      console.log('Step 1: Generating PDF from resume data...');
+      const pdfBlob = await generatePdfBlob();
+
+      // Step 2: Upload PDF to Simplify
+      console.log('Step 2: Uploading PDF to Simplify...');
+
+      // Create FormData with the PDF blob
+      const formData = new FormData();
+      formData.append('resume_pdf', pdfBlob, `resume_${resumeId}.pdf`);
+      formData.append('resume_id', resumeId);
+      formData.append('job_id', jobId);
+
+      // Use the updated API that accepts PDF data
+      const result = await simplifyApi.uploadResumeWithPdf(formData);
+
       console.log('Upload successful:', result);
       setStatus('success');
       onUploadComplete?.(result);
-      
+
     } catch (err) {
       console.error('Upload error:', err);
       setError('Upload failed: ' + err.message);
@@ -88,19 +270,13 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     }
   };
 
-  // Test API connection function
   const testApiConnection = async () => {
     try {
       console.log('Testing API connection...');
-      console.log('API_BASE_URL:', process.env.REACT_APP_API_BASE_URL);
-      console.log('Current user:', currentUser?.uid);
-      
-      // Test with a simple API call first
       const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/status`);
       const data = await response.json();
       console.log('API test response:', data);
       alert('API connection successful!');
-      
     } catch (error) {
       console.error('API test failed:', error);
       alert('API test failed: ' + error.message);
@@ -131,12 +307,21 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
           <p>User ID: {currentUser?.uid || 'NOT AUTHENTICATED'}</p>
           <p>Resume ID: {resumeId}</p>
           <p>Job ID: {jobId}</p>
+          <p>Resume Data: {resumeData ? '✓ Loaded' : '✗ Not loaded'}</p>
           <button
             onClick={testApiConnection}
-            className="mt-2 px-2 py-1 bg-blue-500 text-white rounded text-xs"
+            className="mt-2 px-2 py-1 bg-blue-500 text-white rounded text-xs mr-2"
           >
             Test API Connection
           </button>
+          {!resumeData && (
+            <button
+              onClick={fetchResumeData}
+              className="mt-2 px-2 py-1 bg-green-500 text-white rounded text-xs"
+            >
+              Retry Load Resume
+            </button>
+          )}
         </div>
 
         {/* Step Progress */}
@@ -182,7 +367,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         {step === 2 && (
           <div className="space-y-4">
             <h4 className="font-medium text-lg">Step 2: Capture Session Data</h4>
-            
+
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <h5 className="font-medium text-yellow-800 mb-2">Instructions:</h5>
               <ol className="text-sm text-yellow-800 space-y-1 ml-4 list-decimal">
@@ -258,10 +443,10 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         {step === 3 && (
           <div className="space-y-4">
             <h4 className="font-medium text-lg">Step 3: Upload Resume</h4>
-            
+
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-green-800">
-                ✓ Session captured successfully! Ready to upload your resume.
+                ✓ Session captured successfully! Ready to generate and upload your resume PDF.
               </p>
             </div>
 
@@ -269,22 +454,31 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
               <h5 className="font-medium mb-2">Upload Details:</h5>
               <p className="text-sm text-gray-600">Resume ID: {resumeId}</p>
               <p className="text-sm text-gray-600">Job ID: {jobId}</p>
+              <p className="text-sm text-gray-600">
+                Resume Data: {resumeData ? (
+                  <span className="text-green-600">✓ Loaded ({resumeData.basic?.name || 'Unnamed'})</span>
+                ) : (
+                  <span className="text-red-600">✗ Not loaded</span>
+                )}
+              </p>
             </div>
 
             <button
               onClick={uploadResume}
-              disabled={status === 'uploading' || status === 'success'}
+              disabled={status === 'uploading' || status === 'success' || !resumeData || generatingPdf}
               className="w-full py-3 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
             >
-              {status === 'uploading' ? (
+              {status === 'uploading' || generatingPdf ? (
                 <>
                   <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full inline-block"></span>
-                  Uploading Resume...
+                  {generatingPdf ? 'Generating PDF...' : 'Uploading to Simplify...'}
                 </>
               ) : status === 'success' ? (
                 '✓ Upload Complete!'
+              ) : !resumeData ? (
+                'Waiting for Resume Data...'
               ) : (
-                'Upload Resume to Simplify'
+                'Generate PDF & Upload to Simplify'
               )}
             </button>
 
@@ -310,7 +504,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         {status === 'success' && (
           <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3">
             <p className="text-green-700 text-sm">
-              🎉 Resume uploaded successfully to Simplify Jobs!
+              🎉 Resume PDF generated and uploaded successfully to Simplify Jobs!
             </p>
           </div>
         )}

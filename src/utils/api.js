@@ -362,6 +362,15 @@ export const simplifyApi = {
     });
   },
 
+  // NEW: Upload resume with PDF data generated in UI
+  uploadResumeWithPdf: (formData) => {
+    return apiRequest('/api/simplify/upload-resume-pdf', {
+      method: 'POST',
+      body: formData
+      // Note: Don't set Content-Type header - let browser set it with boundary for multipart/form-data
+    });
+  },
+
   checkSession: () => {
     return apiRequest('/api/simplify/check-session');
   }
