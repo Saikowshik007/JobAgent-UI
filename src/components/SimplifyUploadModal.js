@@ -130,14 +130,14 @@ const ResumeDocument = ({ data }) => (
     </Page>
   </Document>
 );
-// Enhanced React Component with Auto-DevTools Bookmarklet
 const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
-  const [status, setStatus] = useState('checking'); // checking, need-tokens, ready, uploading, success, error
+  const [status, setStatus] = useState('checking'); // checking, need-auth, ready, uploading, success, error
   const [error, setError] = useState('');
   const [resumeData, setResumeData] = useState(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [sessionStatus, setSessionStatus] = useState(null);
-  const [showInstructions, setShowInstructions] = useState(false);
+  const [authToken, setAuthToken] = useState('');
+  const [showAuthInput, setShowAuthInput] = useState(false);
   const { currentUser } = useAuth();
 
   // Auto-check session and load resume data when modal opens
@@ -145,7 +145,8 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     if (isOpen) {
       setStatus('checking');
       setError('');
-      setShowInstructions(false);
+      setAuthToken('');
+      setShowAuthInput(false);
       checkSessionAndLoadData();
     }
   }, [isOpen, resumeId]);
@@ -167,8 +168,8 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         console.log('✅ Valid session found! Ready to upload.');
         setStatus('ready');
       } else {
-        console.log('❌ No valid session found. Need to capture tokens.');
-        setStatus('need-tokens');
+        console.log('❌ No valid session found. Need authentication.');
+        setStatus('need-auth');
       }
     } catch (err) {
       console.error('❌ Error during initialization:', err);
@@ -210,15 +211,15 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     }
   };
 
-  // Enhanced bookmarklet that captures CSRF AND helps user get authorization token
-  const enhancedCaptureBookmarklet = `javascript:(function(){
+  // Enhanced bookmarklet that only captures CSRF
+  const csrfCaptureBookmarklet = `javascript:(function(){
 try {
-  console.log('🔍 JobTrak Enhanced Token Capture Starting...');
+  console.log('🔍 JobTrak CSRF Capture Starting...');
 
   var apiUrl = '${process.env.REACT_APP_API_BASE_URL || 'https://jobtrackai.duckdns.org'}';
-  var userId = '${currentUser?.uid}';
+  var userId = '${simplifyApi.getCurrentUserId()}';
 
-  if (!userId) {
+  if (!userId || userId === 'default_user') {
     alert('❌ Error: No user ID found. Please make sure you are logged into JobTrak.');
     return;
   }
@@ -232,7 +233,7 @@ try {
   console.log('👤 Using User ID:', userId);
   console.log('🌐 API URL:', apiUrl);
 
-  // Get all cookies
+  // Get CSRF token from cookies
   var cookies = {};
   document.cookie.split(';').forEach(function(cookie) {
     var parts = cookie.trim().split('=');
@@ -242,10 +243,8 @@ try {
   });
 
   var csrf = cookies.csrf;
-  var authorization = cookies.authorization;
 
   console.log('🔍 CSRF Token Status:', !!csrf);
-  console.log('🔍 Authorization Token Status:', !!authorization);
   console.log('🍪 Available cookies:', Object.keys(cookies));
 
   if (!csrf) {
@@ -253,182 +252,71 @@ try {
     return;
   }
 
-  // Function to send tokens to backend
-  function sendTokensToBackend(csrfToken, authToken) {
-    var payload = {
-      csrf: csrfToken,
-      authorization: authToken,
-      cookies: document.cookie,
-      url: location.href,
-      timestamp: new Date().toISOString(),
-      capture_method: 'enhanced_auto'
-    };
+  console.log('📤 Sending CSRF token to JobTrak...');
 
-    fetch(apiUrl + '/api/simplify/auto-capture', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': userId
-      },
-      credentials: 'include',
-      body: JSON.stringify(payload)
-    })
-    .then(function(response) {
-      console.log('📡 Response status:', response.status);
-      if (response.ok) {
-        return response.json();
-      } else {
-        return response.text().then(function(text) {
-          throw new Error('HTTP ' + response.status + ': ' + text);
-        });
-      }
-    })
-    .then(function(result) {
-      console.log('✅ Success:', result);
-      alert('✅ All tokens captured successfully!\\n\\nBoth CSRF and Authorization tokens have been sent to JobTrak.\\n\\nYou can now go back and upload your resume!');
-    })
-    .catch(function(error) {
-      console.error('❌ Error:', error);
-      alert('❌ Failed to send tokens:\\n\\n' + error.message);
-    });
-  }
+  var payload = {
+    csrf: csrf,
+    cookies: document.cookie,
+    url: location.href,
+    timestamp: new Date().toISOString(),
+    capture_method: 'csrf_only'
+  };
 
-  // If we have both tokens, send them immediately
-  if (csrf && authorization) {
-    console.log('✅ Found both CSRF and Authorization tokens!');
-    sendTokensToBackend(csrf, authorization);
-    return;
-  }
-
-  // If we only have CSRF, help user get authorization token
-  if (csrf && !authorization) {
-    console.log('📤 Sending CSRF token first...');
-
-    // Send CSRF token first
-    var csrfPayload = {
-      csrf: csrf,
-      cookies: document.cookie,
-      url: location.href,
-      timestamp: new Date().toISOString(),
-      capture_method: 'csrf_only_step1'
-    };
-
-    fetch(apiUrl + '/api/simplify/auto-capture', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': userId
-      },
-      credentials: 'include',
-      body: JSON.stringify(csrfPayload)
-    })
-    .then(function(response) {
-      if (response.ok) {
-        return response.json();
-      } else {
-        throw new Error('Failed to send CSRF token');
-      }
-    })
-    .then(function(result) {
-      console.log('✅ CSRF token sent successfully');
-
-      // Now help user get authorization token
-      alert('✅ CSRF token captured!\\n\\n🔧 Now I will help you find the Authorization token...\\n\\nClick OK to open Developer Tools and navigate to the cookies.');
-
-      // Try to open DevTools programmatically (this works in some browsers)
-      try {
-        // Method 1: Try to trigger DevTools via debugger (will pause if DevTools are open)
-        setTimeout(function() {
-          console.log('%c🔧 DEVELOPER TOOLS GUIDE', 'font-size: 20px; font-weight: bold; color: #2196F3; background: #E3F2FD; padding: 10px; border-radius: 5px;');
-          console.log('%c📍 STEP 1: Open Developer Tools', 'font-size: 16px; font-weight: bold; color: #FF9800;');
-          console.log('   Press F12 or Ctrl+Shift+I (Windows) or Cmd+Option+I (Mac)');
-          console.log('%c📍 STEP 2: Go to Application Tab', 'font-size: 16px; font-weight: bold; color: #FF9800;');
-          console.log('   Click on the "Application" tab in DevTools');
-          console.log('%c📍 STEP 3: Navigate to Cookies', 'font-size: 16px; font-weight: bold; color: #FF9800;');
-          console.log('   In the left sidebar: Storage → Cookies → https://simplify.jobs');
-          console.log('%c📍 STEP 4: Find Authorization Token', 'font-size: 16px; font-weight: bold; color: #4CAF50;');
-          console.log('   Look for a cookie named "authorization"');
-          console.log('   Copy its value');
-          console.log('%c📍 STEP 5: Go Back to JobTrak', 'font-size: 16px; font-weight: bold; color: #4CAF50;');
-          console.log('   Paste the authorization token in the form');
-
-          // Try to trigger a breakpoint to encourage opening DevTools
-          debugger;
-        }, 1000);
-
-        // Create visual guide overlay
-        var overlay = document.createElement('div');
-        overlay.id = 'jobtrak-guide-overlay';
-        overlay.innerHTML = \`
-          <div style="
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            z-index: 999999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: Arial, sans-serif;
-          ">
-            <div style="
-              background: white;
-              padding: 30px;
-              border-radius: 10px;
-              max-width: 600px;
-              text-align: center;
-              box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            ">
-              <h2 style="color: #2196F3; margin-bottom: 20px;">🔧 Find Your Authorization Token</h2>
-              <div style="text-align: left; margin: 20px 0;">
-                <div style="margin: 15px 0; padding: 10px; background: #f5f5f5; border-radius: 5px;">
-                  <strong>📍 Step 1:</strong> Press <kbd style="background: #333; color: white; padding: 2px 6px; border-radius: 3px;">F12</kbd> to open Developer Tools
-                </div>
-                <div style="margin: 15px 0; padding: 10px; background: #f5f5f5; border-radius: 5px;">
-                  <strong>📍 Step 2:</strong> Click the <strong>"Application"</strong> tab
-                </div>
-                <div style="margin: 15px 0; padding: 10px; background: #f5f5f5; border-radius: 5px;">
-                  <strong>📍 Step 3:</strong> Navigate to: <strong>Storage → Cookies → https://simplify.jobs</strong>
-                </div>
-                <div style="margin: 15px 0; padding: 10px; background: #e8f5e8; border-radius: 5px;">
-                  <strong>📍 Step 4:</strong> Find the <strong>"authorization"</strong> cookie and copy its value
-                </div>
-                <div style="margin: 15px 0; padding: 10px; background: #e3f2fd; border-radius: 5px;">
-                  <strong>📍 Step 5:</strong> Go back to JobTrak and paste the token
-                </div>
-              </div>
-              <button onclick="document.getElementById('jobtrak-guide-overlay').remove()" style="
-                background: #2196F3;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-              ">Got it! Open DevTools</button>
-            </div>
-          </div>
-        \`;
-        document.body.appendChild(overlay);
-
-      } catch (e) {
-        console.log('Could not automatically open DevTools, but instructions are in console');
-      }
-
-    })
-    .catch(function(error) {
-      console.error('❌ Error sending CSRF:', error);
-      alert('❌ Failed to send CSRF token:\\n\\n' + error.message);
-    });
-  }
+  fetch(apiUrl + '/api/simplify/auto-capture', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': userId
+    },
+    credentials: 'include',
+    body: JSON.stringify(payload)
+  })
+  .then(function(response) {
+    console.log('📡 Response status:', response.status);
+    if (response.ok) {
+      return response.json();
+    } else {
+      return response.text().then(function(text) {
+        throw new Error('HTTP ' + response.status + ': ' + text);
+      });
+    }
+  })
+  .then(function(result) {
+    console.log('✅ Success:', result);
+    alert('✅ CSRF token captured successfully!\\n\\nGo back to JobTrak and enter your authorization token.');
+  })
+  .catch(function(error) {
+    console.error('❌ Error:', error);
+    alert('❌ Failed to capture CSRF token:\\n\\n' + error.message);
+  });
 
 } catch(error) {
   console.error('❌ Bookmarklet Error:', error);
   alert('❌ Bookmarklet Error:\\n\\n' + error.message + '\\n\\nCheck browser console for details.');
 }
 })();`;
+
+  const handleAuthSubmit = async () => {
+    if (!authToken.trim()) {
+      setError('Please enter your authorization token');
+      return;
+    }
+
+    try {
+      console.log('🔑 Submitting authorization token...');
+
+      // Use the API method instead of direct fetch
+      await simplifyApi.storeAuthToken(authToken.trim());
+
+      console.log('✅ Authorization stored successfully');
+      setStatus('ready');
+      setShowAuthInput(false);
+
+    } catch (err) {
+      console.error('❌ Failed to store authorization:', err);
+      setError(`Failed to store authorization: ${err.message}`);
+    }
+  };
 
   const uploadToSimplifyViaBackend = async () => {
     setStatus('uploading');
@@ -467,7 +355,7 @@ try {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Upload to Simplify Jobs</h3>
           <button
@@ -497,80 +385,74 @@ try {
           </div>
         )}
 
-        {/* Need Tokens */}
-        {status === 'need-tokens' && (
+        {/* Need Authentication */}
+        {status === 'need-auth' && (
           <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-medium text-blue-800 mb-2">🔐 Enhanced Token Capture</h4>
-              <p className="text-sm text-blue-700">
-                Use our smart bookmarklet to automatically capture your Simplify tokens with guided assistance.
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h4 className="font-medium text-yellow-800 mb-2">🔐 Authentication Required</h4>
+              <p className="text-sm text-yellow-700">
+                Two-step authentication process: First capture CSRF token, then provide authorization token.
               </p>
             </div>
 
-            {/* Enhanced Bookmarklet */}
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg p-4">
-              <h5 className="font-medium text-purple-800 mb-3">🚀 Smart Token Capture</h5>
+            {/* Step 1: CSRF Capture */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-4">
+              <h5 className="font-medium text-blue-800 mb-3">Step 1: Capture CSRF Token</h5>
 
-              <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300 mb-3">
+              <div className="bg-white p-3 rounded border-2 border-dashed border-blue-300 mb-3">
                 <a
-                  href={enhancedCaptureBookmarklet}
-                  className="inline-block px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded hover:from-purple-700 hover:to-pink-700 text-sm font-medium cursor-move select-all"
+                  href={csrfCaptureBookmarklet}
+                  className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium cursor-move select-all"
                   draggable="true"
                   onClick={(e) => e.preventDefault()}
                 >
-                  🔧 Smart Capture Tokens
+                  📌 Capture CSRF Token
                 </a>
               </div>
 
-              <div className="text-xs text-purple-600 space-y-2">
-                <p><strong>✨ This enhanced bookmarklet will:</strong></p>
-                <ul className="list-disc ml-4 space-y-1">
-                  <li>🔍 Automatically capture your CSRF token</li>
-                  <li>🔍 Try to find your authorization token automatically</li>
-                  <li>🔧 If authorization token not found, open DevTools for you</li>
-                  <li>📍 Navigate you to the right place in DevTools</li>
-                  <li>📋 Show visual guide with step-by-step instructions</li>
-                  <li>✅ Send both tokens to JobTrak when found</li>
-                </ul>
-
-                <div className="bg-purple-100 p-2 rounded mt-3">
-                  <p><strong>Instructions:</strong></p>
-                  <ol className="list-decimal ml-4 space-y-1">
-                    <li>Drag the button above to your bookmarks bar</li>
-                    <li>Go to <a href="https://simplify.jobs" target="_blank" rel="noopener noreferrer" className="underline font-medium">simplify.jobs</a> and make sure you're logged in</li>
-                    <li>Click the bookmark - it will do everything automatically!</li>
-                    <li>Follow any on-screen instructions if needed</li>
-                  </ol>
-                </div>
+              <div className="text-xs text-blue-600 space-y-1">
+                <p><strong>Instructions:</strong></p>
+                <ol className="list-decimal ml-4 space-y-1">
+                  <li>Drag the blue button above to your bookmarks bar</li>
+                  <li>Go to <a href="https://simplify.jobs" target="_blank" rel="noopener noreferrer" className="underline">simplify.jobs</a> and make sure you're logged in</li>
+                  <li>Click the bookmark you just created</li>
+                  <li>Wait for success message, then continue to Step 2</li>
+                </ol>
               </div>
             </div>
 
-            {/* Manual Fallback */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <h5 className="font-medium text-gray-700 mb-2">🔄 Alternative: Manual Capture</h5>
-              <p className="text-sm text-gray-600 mb-2">
-                If the smart bookmarklet doesn't work, you can manually find and enter your tokens.
-              </p>
-              <button
-                onClick={() => setShowInstructions(!showInstructions)}
-                className="text-sm text-blue-600 hover:text-blue-800 underline"
-              >
-                {showInstructions ? 'Hide' : 'Show'} manual instructions
-              </button>
+            {/* Step 2: Authorization Token Input */}
+            <div className="bg-gradient-to-r from-green-50 to-teal-50 border-2 border-green-200 rounded-lg p-4">
+              <h5 className="font-medium text-green-800 mb-3">Step 2: Enter Authorization Token</h5>
 
-              {showInstructions && (
-                <div className="mt-3 text-xs text-gray-600 bg-white p-3 rounded border">
-                  <p><strong>Manual Steps:</strong></p>
-                  <ol className="list-decimal ml-4 mt-2 space-y-1">
-                    <li>Go to simplify.jobs and make sure you're logged in</li>
-                    <li>Press F12 to open Developer Tools</li>
-                    <li>Click "Application" tab</li>
-                    <li>In sidebar: Storage → Cookies → https://simplify.jobs</li>
-                    <li>Find "csrf" and "authorization" cookies</li>
-                    <li>Copy both values and contact support for manual entry</li>
+              <div className="space-y-3">
+                <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
+                  <p><strong>How to find your authorization token:</strong></p>
+                  <ol className="list-decimal ml-4 mt-1 space-y-1">
+                    <li>On simplify.jobs, open Developer Tools (F12)</li>
+                    <li>Go to Application tab → Cookies → https://simplify.jobs</li>
+                    <li>Find the "authorization" cookie and copy its value</li>
+                    <li>Paste it below</li>
                   </ol>
                 </div>
-              )}
+
+                <div className="space-y-2">
+                  <textarea
+                    value={authToken}
+                    onChange={(e) => setAuthToken(e.target.value)}
+                    placeholder="Paste your authorization token here..."
+                    className="w-full p-3 border rounded text-sm font-mono"
+                    rows="3"
+                  />
+                  <button
+                    onClick={handleAuthSubmit}
+                    disabled={!authToken.trim()}
+                    className="w-full py-2 px-4 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                  >
+                    Submit Authorization Token
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="flex space-x-3">
