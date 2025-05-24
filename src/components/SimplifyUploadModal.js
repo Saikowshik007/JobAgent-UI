@@ -1,144 +1,12 @@
-// SimplifyUploadModal.js - Direct upload to Simplify API
-
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { simplifyApi, jobsApi } from '../utils/api';
-import { pdf } from '@react-pdf/renderer';
-import { Document, Page, Text, View, StyleSheet, Font, Link } from '@react-pdf/renderer';
-import yaml from 'js-yaml';
-
-// Register fonts for PDF generation
-Font.register({
-  family: 'Calibri',
-  fonts: [
-    { src: '/fonts/calibri.ttf' },
-    { src: '/fonts/calibrib.ttf', fontWeight: 'bold' },
-    { src: '/fonts/calibrii.ttf', fontStyle: 'italic' },
-  ]
-});
-
-// PDF styles
-const styles = StyleSheet.create({
-  page: {
-    paddingTop: 40,
-    paddingBottom: 40,
-    paddingHorizontal: 50,
-    fontSize: 10,
-    fontFamily: 'Calibri',
-    lineHeight: 1.3,
-  },
-  header: { fontSize: 13, textAlign: 'center', fontWeight: 'bold', marginBottom: 2, textTransform: 'uppercase' },
-  contact: { textAlign: 'center', fontSize: 9, marginBottom: 8 },
-  sectionTitle: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    marginTop: 8,
-    marginBottom: 3,
-    borderBottomWidth: 1,
-    borderBottomColor: '#000000',
-    borderBottomStyle: 'solid',
-    paddingBottom: 1,
-  },
-  jobBlock: { marginBottom: 6 },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  jobTitle: { fontStyle: 'italic' },
-  bullet: { marginLeft: 10, marginBottom: 1 },
-  textNormal: { marginBottom: 3 },
-  projectTitle: { fontWeight: 'bold', color: 'blue', textDecoration: 'none' },
-});
-
-// PDF Document component
-const ResumeDocument = ({ data }) => (
-  <Document>
-    <Page size="A4" style={styles.page}>
-      {data.basic && (
-        <>
-          <Text style={styles.header}>{data.basic.name}</Text>
-          <Text style={styles.contact}>
-            {[data.basic.email, data.basic.phone, ...(data.basic.websites || [])].filter(Boolean).join(' | ')}
-          </Text>
-        </>
-      )}
-
-      {data.objective && (
-        <>
-          <Text style={styles.sectionTitle}>Objective</Text>
-          <Text style={styles.textNormal}>{data.objective}</Text>
-        </>
-      )}
-
-      {data.experiences && (
-        <>
-          <Text style={styles.sectionTitle}>Experience</Text>
-          {data.experiences.map((exp, idx) => (
-            <View key={idx} style={styles.jobBlock}>
-              <View style={styles.row}>
-                <Text style={{ fontWeight: 'bold' }}>{exp.company}</Text>
-                <Text>{exp.titles?.[0]?.startdate} - {exp.titles?.[0]?.enddate}</Text>
-              </View>
-              <View style={styles.row}>
-                <Text style={styles.jobTitle}>{exp.titles?.[0]?.name}</Text>
-                <Text style={styles.jobTitle}>{exp.location}</Text>
-              </View>
-              {exp.highlights?.map((point, i) => (
-                <Text key={i} style={styles.bullet}>• {point}</Text>
-              ))}
-            </View>
-          ))}
-        </>
-      )}
-
-      {data.projects && (
-        <>
-          <Text style={styles.sectionTitle}>Projects</Text>
-          {data.projects.map((proj, idx) => (
-            <View key={idx} style={styles.jobBlock}>
-              {proj.link ? (
-                <Link src={proj.link} style={styles.projectTitle}>{proj.name}</Link>
-              ) : (
-                <Text style={{ fontWeight: 'bold' }}>{proj.name}</Text>
-              )}
-              {proj.highlights?.map((point, i) => (
-                <Text key={i} style={styles.bullet}>• {point}</Text>
-              ))}
-            </View>
-          ))}
-        </>
-      )}
-
-      {data.education && (
-        <>
-          <Text style={styles.sectionTitle}>Education</Text>
-          {data.education.map((edu, idx) => (
-            <View key={idx} style={styles.jobBlock}>
-              <View style={styles.row}>
-                <Text style={{ fontWeight: 'bold' }}>{edu.school}, {edu.degrees?.[0]?.names?.join(', ')}</Text>
-                <Text>{edu.degrees?.[0]?.dates}</Text>
-              </View>
-            </View>
-          ))}
-        </>
-      )}
-
-      {data.skills && (
-        <>
-          <Text style={styles.sectionTitle}>Skills</Text>
-          {data.skills.map((s, idx) => (
-            <Text key={idx}><Text style={{ fontWeight: 'bold' }}>{s.category}:</Text> {s.skills.join(', ')}</Text>
-          ))}
-        </>
-      )}
-    </Page>
-  </Document>
-);
-
+// Updated React Component with hybrid approach
 const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
-  const [status, setStatus] = useState('checking'); // checking, need-tokens, ready, uploading, success, error
+  const [status, setStatus] = useState('checking'); // checking, need-auth, ready, uploading, success, error
   const [error, setError] = useState('');
   const [resumeData, setResumeData] = useState(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [sessionStatus, setSessionStatus] = useState(null);
+  const [authToken, setAuthToken] = useState('');
+  const [showAuthInput, setShowAuthInput] = useState(false);
   const { currentUser } = useAuth();
 
   // Auto-check session and load resume data when modal opens
@@ -146,6 +14,8 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     if (isOpen) {
       setStatus('checking');
       setError('');
+      setAuthToken('');
+      setShowAuthInput(false);
       checkSessionAndLoadData();
     }
   }, [isOpen, resumeId]);
@@ -163,12 +33,12 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         await fetchResumeData();
       }
 
-      if (sessionCheck.has_session) {
-        console.log('✅ Session found! Ready to upload.');
+      if (sessionCheck.has_session && sessionCheck.session_age_hours < 24) {
+        console.log('✅ Valid session found! Ready to upload.');
         setStatus('ready');
       } else {
-        console.log('❌ No session found. Need tokens.');
-        setStatus('need-tokens');
+        console.log('❌ No valid session found. Need authentication.');
+        setStatus('need-auth');
       }
     } catch (err) {
       console.error('❌ Error during initialization:', err);
@@ -210,48 +80,152 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     }
   };
 
-  const uploadResumeDirectly = async () => {
+  // Enhanced bookmarklet that only captures CSRF
+  const csrfCaptureBookmarklet = `javascript:(function(){
+try {
+  console.log('🔍 JobTrak CSRF Capture Starting...');
+
+  var apiUrl = '${process.env.REACT_APP_API_BASE_URL || 'https://jobtrackai.duckdns.org'}';
+  var userId = '${currentUser?.uid}';
+
+  if (!userId) {
+    alert('❌ Error: No user ID found. Please make sure you are logged into JobTrak.');
+    return;
+  }
+
+  // Check if we're on Simplify.jobs
+  if (!location.hostname.includes('simplify.jobs')) {
+    alert('❌ This bookmarklet must be run on simplify.jobs\\n\\nCurrent site: ' + location.hostname);
+    return;
+  }
+
+  console.log('👤 Using User ID:', userId);
+  console.log('🌐 API URL:', apiUrl);
+
+  // Get CSRF token from cookies
+  var cookies = {};
+  document.cookie.split(';').forEach(function(cookie) {
+    var parts = cookie.trim().split('=');
+    if (parts[0] && parts[1]) {
+      cookies[parts[0]] = decodeURIComponent(parts[1]);
+    }
+  });
+
+  var csrf = cookies.csrf;
+
+  console.log('🔍 CSRF Token Status:', !!csrf);
+  console.log('🍪 Available cookies:', Object.keys(cookies));
+
+  if (!csrf) {
+    alert('❌ CSRF token not found!\\n\\nMake sure you are logged into Simplify Jobs and try again.\\n\\nAvailable cookies: ' + Object.keys(cookies).join(', '));
+    return;
+  }
+
+  console.log('📤 Sending CSRF token to JobTrak...');
+
+  var payload = {
+    csrf: csrf,
+    cookies: document.cookie,
+    url: location.href,
+    timestamp: new Date().toISOString(),
+    capture_method: 'csrf_only'
+  };
+
+  fetch(apiUrl + '/api/simplify/auto-capture', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': userId
+    },
+    credentials: 'include',
+    body: JSON.stringify(payload)
+  })
+  .then(function(response) {
+    console.log('📡 Response status:', response.status);
+    if (response.ok) {
+      return response.json();
+    } else {
+      return response.text().then(function(text) {
+        throw new Error('HTTP ' + response.status + ': ' + text);
+      });
+    }
+  })
+  .then(function(result) {
+    console.log('✅ Success:', result);
+    alert('✅ CSRF token captured successfully!\\n\\nGo back to JobTrak and enter your authorization token.');
+  })
+  .catch(function(error) {
+    console.error('❌ Error:', error);
+    alert('❌ Failed to capture CSRF token:\\n\\n' + error.message);
+  });
+
+} catch(error) {
+  console.error('❌ Bookmarklet Error:', error);
+  alert('❌ Bookmarklet Error:\\n\\n' + error.message + '\\n\\nCheck browser console for details.');
+}
+})();`;
+
+  const handleAuthSubmit = async () => {
+    if (!authToken.trim()) {
+      setError('Please enter your authorization token');
+      return;
+    }
+
+    try {
+      console.log('🔑 Submitting authorization token...');
+
+      // Send the auth token to backend
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/simplify/store-auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser?.uid
+        },
+        body: JSON.stringify({
+          authorization: authToken.trim()
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to store authorization: ${response.status}`);
+      }
+
+      console.log('✅ Authorization stored successfully');
+      setStatus('ready');
+      setShowAuthInput(false);
+
+    } catch (err) {
+      console.error('❌ Failed to store authorization:', err);
+      setError(`Failed to store authorization: ${err.message}`);
+    }
+  };
+
+  const uploadToSimplifyViaBackend = async () => {
     setStatus('uploading');
     setError('');
 
     try {
-      console.log('🚀 Starting direct upload to Simplify...');
+      console.log('🚀 Starting upload via backend...');
 
       // Generate PDF
       const pdfBlob = await generatePdfBlob();
 
-      // Get tokens from backend
-      const tokenData = await simplifyApi.getStoredTokens();
-      if (!tokenData.authorization || !tokenData.csrf) {
-        throw new Error('Missing authentication tokens. Please capture tokens first.');
-      }
+      console.log('📤 Uploading via backend proxy...');
 
-      console.log('🔑 Got tokens, uploading directly to Simplify API...');
-
-      // Create form data for multipart upload
+      // Create form data
       const formData = new FormData();
       const fileName = `${resumeData?.basic?.name?.replace(/\s+/g, '_') || 'resume'}_resume.pdf`;
-      formData.append('file', pdfBlob, fileName);
+      formData.append('resume_pdf', pdfBlob, fileName);
+      formData.append('resume_id', resumeId);
+      if (jobId) formData.append('job_id', jobId);
 
-      // Upload directly to Simplify API
-      const response = await fetch('https://api.simplify.jobs/v2/candidate/me/resume/upload', {
+      // Upload via backend
+      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/simplify/upload-resume-pdf`, {
         method: 'POST',
         headers: {
-          'accept': '*/*',
-          'accept-language': 'en-US,en;q=0.9',
-          'origin': 'https://simplify.jobs',
-          'referer': 'https://simplify.jobs/',
-          'sec-ch-ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
-          'sec-ch-ua-mobile': '?0',
-          'sec-ch-ua-platform': '"macOS"',
-          'sec-fetch-dest': 'empty',
-          'sec-fetch-mode': 'cors',
-          'sec-fetch-site': 'same-site',
-          'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
-          'x-csrf-token': tokenData.csrf,
+          'X-User-Id': currentUser?.uid
         },
-        body: formData,
-        credentials: 'include'
+        body: formData
       });
 
       if (!response.ok) {
@@ -260,13 +234,13 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
       }
 
       const result = await response.json();
-      console.log('✅ Direct upload successful:', result);
+      console.log('✅ Backend upload successful:', result);
 
       setStatus('success');
       onUploadComplete?.(result);
 
     } catch (err) {
-      console.error('❌ Direct upload failed:', err);
+      console.error('❌ Backend upload failed:', err);
       setError(`Upload failed: ${err.message}`);
       setStatus('error');
     }
@@ -312,132 +286,73 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
           </div>
         )}
 
-        {/* Need Tokens */}
-        {status === 'need-tokens' && (
+        {/* Need Authentication */}
+        {status === 'need-auth' && (
           <div className="space-y-4">
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <h4 className="font-medium text-yellow-800 mb-2">🔐 Authentication Required</h4>
               <p className="text-sm text-yellow-700">
-                You need to capture your Simplify.jobs authentication tokens first.
+                Two-step authentication process: First capture CSRF token, then provide authorization token.
               </p>
             </div>
 
-            {/* Enhanced Bookmarklet */}
-            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 rounded-lg p-4">
-              <h5 className="font-medium text-purple-800 mb-3">🚀 One-Click Setup</h5>
+            {/* Step 1: CSRF Capture */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-4">
+              <h5 className="font-medium text-blue-800 mb-3">Step 1: Capture CSRF Token</h5>
 
-              <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300 mb-3">
+              <div className="bg-white p-3 rounded border-2 border-dashed border-blue-300 mb-3">
                 <a
-                  href={`javascript:(function(){
-try {
-  console.log('🔍 JobTrak Token Capture Starting...');
-
-  var apiUrl = '${process.env.REACT_APP_API_BASE_URL || 'https://jobtrackai.duckdns.org'}';
-  var userId = '${currentUser?.uid}';
-
-  if (!userId) {
-    alert('❌ Error: No user ID found. Please make sure you are logged into JobTrak.');
-    return;
-  }
-
-  console.log('👤 Using User ID:', userId);
-  console.log('🌐 API URL:', apiUrl);
-
-  var cookies = {};
-  document.cookie.split(';').forEach(function(cookie) {
-    var parts = cookie.trim().split('=');
-    if (parts[0] && parts[1]) {
-      cookies[parts[0]] = decodeURIComponent(parts[1]);
-    }
-  });
-
-  var csrf = cookies.csrf;
-  var auth = null;
-
-  try {
-    var fb = localStorage.getItem('featurebaseGlobalAuth');
-    if (fb) {
-      var parsed = JSON.parse(fb);
-      auth = parsed.jwt;
-      console.log('✅ Found auth in featurebaseGlobalAuth');
-    }
-  } catch(e) {
-    console.log('❌ No featurebaseGlobalAuth found:', e.message);
-  }
-
-  if (!auth && cookies.authorization) {
-    auth = cookies.authorization;
-    console.log('✅ Found auth in cookies');
-  }
-
-  console.log('🔍 Token Status - CSRF:', !!csrf, 'Auth:', !!auth);
-  console.log('🍪 Available cookies:', Object.keys(cookies));
-
-  if (!auth || !csrf) {
-    alert('❌ Tokens not found!\\n\\nCSRF: ' + (csrf ? '✅' : '❌') + '\\nAuth: ' + (auth ? '✅' : '❌') + '\\n\\nMake sure you are logged into Simplify Jobs and try again.');
-    return;
-  }
-
-  console.log('📤 Sending tokens to JobTrak...');
-
-  var payload = {
-    cookies: document.cookie,
-    csrf: csrf,
-    authorization: auth,
-    url: location.href,
-    timestamp: new Date().toISOString()
-  };
-
-  fetch(apiUrl + '/api/simplify/auto-capture', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': userId
-    },
-    credentials: 'include',
-    body: JSON.stringify(payload)
-  })
-  .then(function(response) {
-    console.log('📡 Response status:', response.status);
-    if (response.ok) {
-      return response.json();
-    } else {
-      return response.text().then(function(text) {
-        throw new Error('HTTP ' + response.status + ': ' + text);
-      });
-    }
-  })
-  .then(function(result) {
-    console.log('✅ Success:', result);
-    alert('✅ Tokens captured successfully!\\n\\nGo back to JobTrak and refresh the modal.');
-  })
-  .catch(function(error) {
-    console.error('❌ Error:', error);
-    alert('❌ Failed to capture tokens:\\n\\n' + error.message);
-  });
-
-} catch(error) {
-  console.error('❌ Bookmarklet Error:', error);
-  alert('❌ Bookmarklet Error:\\n\\n' + error.message + '\\n\\nCheck browser console for details.');
-}
-})();`}
-                  className="inline-block px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium cursor-move select-all"
+                  href={csrfCaptureBookmarklet}
+                  className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium cursor-move select-all"
                   draggable="true"
                   onClick={(e) => e.preventDefault()}
                 >
-                  📌 Capture Simplify Tokens
+                  📌 Capture CSRF Token
                 </a>
               </div>
 
-              <div className="text-xs text-purple-600 space-y-1">
-                <p><strong>Steps:</strong></p>
+              <div className="text-xs text-blue-600 space-y-1">
+                <p><strong>Instructions:</strong></p>
                 <ol className="list-decimal ml-4 space-y-1">
-                  <li>Drag the purple button above to your bookmarks bar</li>
+                  <li>Drag the blue button above to your bookmarks bar</li>
                   <li>Go to <a href="https://simplify.jobs" target="_blank" rel="noopener noreferrer" className="underline">simplify.jobs</a> and make sure you're logged in</li>
                   <li>Click the bookmark you just created</li>
-                  <li>Check the alert message - it should say "Tokens captured successfully"</li>
-                  <li>Come back here and click "Check Again"</li>
+                  <li>Wait for success message, then continue to Step 2</li>
                 </ol>
+              </div>
+            </div>
+
+            {/* Step 2: Authorization Token Input */}
+            <div className="bg-gradient-to-r from-green-50 to-teal-50 border-2 border-green-200 rounded-lg p-4">
+              <h5 className="font-medium text-green-800 mb-3">Step 2: Enter Authorization Token</h5>
+
+              <div className="space-y-3">
+                <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
+                  <p><strong>How to find your authorization token:</strong></p>
+                  <ol className="list-decimal ml-4 mt-1 space-y-1">
+                    <li>On simplify.jobs, open Developer Tools (F12)</li>
+                    <li>Go to Application tab → Cookies → https://simplify.jobs</li>
+                    <li>Find the "authorization" cookie and copy its value</li>
+                    <li>Paste it below</li>
+                  </ol>
+                </div>
+
+                <div className="space-y-2">
+                  <textarea
+                    value={authToken}
+                    onChange={(e) => setAuthToken(e.target.value)}
+                    placeholder="Paste your authorization token here..."
+                    className="w-full p-3 border rounded text-sm font-mono"
+                    rows="3"
+                  />
+                  <button
+                    onClick={handleAuthSubmit}
+                    disabled={!authToken.trim()}
+                    className="w-full py-2 px-4 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                  >
+                    Submit Authorization Token
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -446,7 +361,7 @@ try {
                 onClick={retryCheck}
                 className="flex-1 py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
-                Check Again
+                Check Session Again
               </button>
               <button
                 onClick={() => window.open('https://simplify.jobs', '_blank')}
@@ -464,7 +379,7 @@ try {
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <h4 className="font-medium text-green-800 mb-2">✅ Ready to Upload</h4>
               <p className="text-sm text-green-700">
-                Authentication confirmed! Your resume will be generated as a PDF and uploaded directly to Simplify.
+                Authentication confirmed! Your resume will be generated and uploaded via our secure backend.
               </p>
             </div>
 
@@ -472,12 +387,11 @@ try {
               <h5 className="font-medium mb-2">Upload Details:</h5>
               <p className="text-sm text-gray-600">Resume: {resumeData?.basic?.name || 'Unnamed'}</p>
               <p className="text-sm text-gray-600">Job ID: {jobId}</p>
-              <p className="text-sm text-gray-600">Session: {sessionStatus?.session_age_hours?.toFixed(1)}h old</p>
-              <p className="text-sm text-gray-600">Upload Method: Direct to Simplify API</p>
+              <p className="text-sm text-gray-600">Upload Method: Secure Backend Proxy</p>
             </div>
 
             <button
-              onClick={uploadResumeDirectly}
+              onClick={uploadToSimplifyViaBackend}
               disabled={!resumeData}
               className="w-full py-3 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
             >
@@ -498,7 +412,7 @@ try {
           <div className="text-center py-8">
             <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
             <p className="text-gray-600 mb-2">
-              {generatingPdf ? 'Generating PDF...' : 'Uploading directly to Simplify...'}
+              {generatingPdf ? 'Generating PDF...' : 'Uploading via secure backend...'}
             </p>
             <p className="text-xs text-gray-500">This may take a few moments</p>
           </div>
@@ -513,7 +427,7 @@ try {
               </svg>
             </div>
             <h4 className="text-lg font-medium text-gray-900 mb-2">Upload Successful! 🎉</h4>
-            <p className="text-gray-600">Your resume has been uploaded directly to Simplify Jobs.</p>
+            <p className="text-gray-600">Your resume has been uploaded to Simplify Jobs via our secure backend.</p>
           </div>
         )}
 
