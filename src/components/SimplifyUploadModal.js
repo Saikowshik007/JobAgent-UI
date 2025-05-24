@@ -86,9 +86,9 @@ try {
   console.log('🔍 JobTrak CSRF Capture Starting...');
 
   var apiUrl = '${process.env.REACT_APP_API_BASE_URL || 'https://jobtrackai.duckdns.org'}';
-  var userId = '${currentUser?.uid}';
+  var userId = '${simplifyApi.getCurrentUserId()}';
 
-  if (!userId) {
+  if (!userId || userId === 'default_user') {
     alert('❌ Error: No user ID found. Please make sure you are logged into JobTrak.');
     return;
   }
@@ -174,21 +174,8 @@ try {
     try {
       console.log('🔑 Submitting authorization token...');
 
-      // Send the auth token to backend
-      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/simplify/store-auth`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': currentUser?.uid
-        },
-        body: JSON.stringify({
-          authorization: authToken.trim()
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to store authorization: ${response.status}`);
-      }
+      // Use the API method instead of direct fetch
+      await simplifyApi.storeAuthToken(authToken.trim());
 
       console.log('✅ Authorization stored successfully');
       setStatus('ready');
@@ -212,28 +199,9 @@ try {
 
       console.log('📤 Uploading via backend proxy...');
 
-      // Create form data
-      const formData = new FormData();
-      const fileName = `${resumeData?.basic?.name?.replace(/\s+/g, '_') || 'resume'}_resume.pdf`;
-      formData.append('resume_pdf', pdfBlob, fileName);
-      formData.append('resume_id', resumeId);
-      if (jobId) formData.append('job_id', jobId);
+      // Upload via backend using the API method
+      const result = await simplifyApi.uploadResumeToSimplify(pdfBlob, resumeId, jobId);
 
-      // Upload via backend
-      const response = await fetch(`${process.env.REACT_APP_API_BASE_URL}/api/simplify/upload-resume-pdf`, {
-        method: 'POST',
-        headers: {
-          'X-User-Id': currentUser?.uid
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${errorText}`);
-      }
-
-      const result = await response.json();
       console.log('✅ Backend upload successful:', result);
 
       setStatus('success');
@@ -451,5 +419,4 @@ try {
     </div>
   );
 };
-
 export default SimplifyUploadModal;

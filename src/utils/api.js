@@ -343,8 +343,11 @@ export const jobsApi = {
   }
 };
 
-// Simplify API - Replace the existing simplifyApi section in your api.js file with this
+// Enhanced Simplify API with hybrid authentication approach
 export const simplifyApi = {
+  /**
+   * Store Simplify session data (legacy method)
+   */
   storeSession: (sessionData) => {
     return apiRequest('/api/simplify/store-session', {
       method: 'POST',
@@ -352,19 +355,94 @@ export const simplifyApi = {
     });
   },
 
-  checkSession: () => {
-    return apiRequest('/api/simplify/check-session');
-  },
-
-  getStoredTokens: () => {
-    return apiRequest('/api/simplify/get-tokens');
-  },
-
+  /**
+   * Auto-capture CSRF token via bookmarklet
+   */
   autoCaptureTokens: (tokenData) => {
+    console.log('🔍 Auto-capturing CSRF token...');
     return apiRequest('/api/simplify/auto-capture', {
       method: 'POST',
       body: JSON.stringify(tokenData)
     });
+  },
+
+  /**
+   * Store authorization token manually
+   */
+  storeAuthToken: (authToken) => {
+    console.log('🔑 Storing authorization token...');
+    return apiRequest('/api/simplify/store-auth', {
+      method: 'POST',
+      body: JSON.stringify({
+        authorization: authToken
+      })
+    });
+  },
+
+  /**
+   * Check if user has a valid Simplify session
+   */
+  checkSession: () => {
+    return apiRequest('/api/simplify/check-session');
+  },
+
+  /**
+   * Get stored tokens
+   */
+  getStoredTokens: () => {
+    return apiRequest('/api/simplify/get-tokens');
+  },
+
+  /**
+   * Upload PDF resume to Simplify via backend proxy
+   */
+  uploadResumeToSimplify: (pdfBlob, resumeId, jobId = null) => {
+    console.log('📤 Uploading resume to Simplify via backend proxy...');
+
+    const formData = new FormData();
+
+    // Create filename from resume ID or use default
+    const fileName = `resume_${resumeId}.pdf`;
+    formData.append('resume_pdf', pdfBlob, fileName);
+    formData.append('resume_id', resumeId);
+
+    if (jobId) {
+      formData.append('job_id', jobId);
+    }
+
+    return apiRequest('/api/simplify/upload-resume-pdf', {
+      method: 'POST',
+      body: formData
+    });
+  },
+
+  /**
+   * Clear stored session data
+   */
+  clearSession: () => {
+    return apiRequest('/api/simplify/clear-session', {
+      method: 'DELETE'
+    });
+  },
+
+  /**
+   * Debug session data (for development)
+   */
+  debugSession: () => {
+    if (process.env.NODE_ENV === 'development') {
+      return apiRequest('/api/simplify/session-debug');
+    } else {
+      console.warn('Debug session only available in development mode');
+      return Promise.resolve({ message: 'Debug not available in production' });
+    }
+  },
+
+  /**
+   * Get current user ID for token management
+   */
+  getCurrentUserId: () => {
+    const user = auth.currentUser;
+    return user?.uid || 'default_user';
   }
 };
 
