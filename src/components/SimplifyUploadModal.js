@@ -309,9 +309,8 @@ try {
   
   console.log('👤 Using User ID:', userId);
   console.log('🌐 API URL:', apiUrl);
-  console.log('🍪 Raw cookies:', document.cookie);
   
-  // Parse all cookies
+  // Get all cookies
   var cookies = {};
   document.cookie.split(';').forEach(function(cookie) {
     var parts = cookie.trim().split('=');
@@ -320,59 +319,139 @@ try {
     }
   });
   
-  console.log('📋 Available cookie names:', Object.keys(cookies));
+  console.log('🍪 All cookies found:', Object.keys(cookies));
   
-  // Find CSRF token - try multiple patterns
-  var csrf = null;
-  var csrfSource = '';
+  var csrf = cookies.csrf;
+  var auth = null;
+  var tokenSource = '';
   
-  // Pattern 1: Direct csrf cookie
-  if (cookies.csrf) {
-    csrf = cookies.csrf;
-    csrfSource = 'csrf';
+  // Method 1: Check all cookie variations
+  var cookieChecks = ['authorization', 'auth', 'token', 'jwt', 'access_token', 'authToken'];
+  for (var i = 0; i < cookieChecks.length; i++) {
+    if (cookies[cookieChecks[i]]) {
+      auth = cookies[cookieChecks[i]];
+      tokenSource = 'cookie:' + cookieChecks[i];
+      console.log('✅ Found auth in cookie:', cookieChecks[i]);
+      break;
+    }
   }
-  // Pattern 2: Look for any cookie containing 'csrf' in name
-  else {
-    Object.keys(cookies).forEach(function(key) {
-      if (key.toLowerCase().includes('csrf') && !csrf) {
-        csrf = cookies[key];
-        csrfSource = key;
+  
+  // Method 2: localStorage variations
+  if (!auth) {
+    var localStorageKeys = ['featurebaseGlobalAuth', 'auth', 'authToken', 'access_token', 'jwt', 'token', 'simplify_auth', 'userAuth'];
+    for (var j = 0; j < localStorageKeys.length; j++) {
+      try {
+        var item = localStorage.getItem(localStorageKeys[j]);
+        if (item) {
+          console.log('🔍 Checking localStorage key:', localStorageKeys[j], 'Value preview:', item.substring(0, 50) + '...');
+          
+          // Try to parse as JSON first
+          try {
+            var parsed = JSON.parse(item);
+            if (parsed.jwt) {
+              auth = parsed.jwt;
+              tokenSource = 'localStorage:' + localStorageKeys[j] + '.jwt';
+              console.log('✅ Found JWT in localStorage:', localStorageKeys[j]);
+              break;
+            }
+            if (parsed.token) {
+              auth = parsed.token;
+              tokenSource = 'localStorage:' + localStorageKeys[j] + '.token';
+              console.log('✅ Found token in localStorage:', localStorageKeys[j]);
+              break;
+            }
+            if (parsed.access_token) {
+              auth = parsed.access_token;
+              tokenSource = 'localStorage:' + localStorageKeys[j] + '.access_token';
+              console.log('✅ Found access_token in localStorage:', localStorageKeys[j]);
+              break;
+            }
+          } catch(parseError) {
+            // If not JSON, check if it looks like a token
+            if (item.length > 20 && (item.startsWith('eyJ') || item.includes('.'))) {
+              auth = item;
+              tokenSource = 'localStorage:' + localStorageKeys[j] + '(raw)';
+              console.log('✅ Found raw token in localStorage:', localStorageKeys[j]);
+              break;
+            }
+          }
+        }
+      } catch(e) {
+        console.log('❌ Error checking localStorage key:', localStorageKeys[j], e.message);
       }
-    });
+    }
   }
   
-  // Pattern 3: Look for JWT-like tokens in cookies (our target token was a JWT)
-  if (!csrf) {
-    Object.keys(cookies).forEach(function(key) {
-      var value = cookies[key];
-      if (value.startsWith('eyJ') && value.split('.').length === 3 && !csrf) {
-        csrf = value;
-        csrfSource = key + '(JWT)';
+  // Method 3: sessionStorage variations
+  if (!auth) {
+    var sessionStorageKeys = ['auth', 'authToken', 'access_token', 'jwt', 'token', 'simplify_auth', 'userAuth'];
+    for (var k = 0; k < sessionStorageKeys.length; k++) {
+      try {
+        var sessionItem = sessionStorage.getItem(sessionStorageKeys[k]);
+        if (sessionItem) {
+          console.log('🔍 Checking sessionStorage key:', sessionStorageKeys[k], 'Value preview:', sessionItem.substring(0, 50) + '...');
+          
+          try {
+            var sessionParsed = JSON.parse(sessionItem);
+            if (sessionParsed.jwt) {
+              auth = sessionParsed.jwt;
+              tokenSource = 'sessionStorage:' + sessionStorageKeys[k] + '.jwt';
+              console.log('✅ Found JWT in sessionStorage:', sessionStorageKeys[k]);
+              break;
+            }
+            if (sessionParsed.token) {
+              auth = sessionParsed.token;
+              tokenSource = 'sessionStorage:' + sessionStorageKeys[k] + '.token';
+              console.log('✅ Found token in sessionStorage:', sessionStorageKeys[k]);
+              break;
+            }
+          } catch(sessionParseError) {
+            if (sessionItem.length > 20 && (sessionItem.startsWith('eyJ') || sessionItem.includes('.'))) {
+              auth = sessionItem;
+              tokenSource = 'sessionStorage:' + sessionStorageKeys[k] + '(raw)';
+              console.log('✅ Found raw token in sessionStorage:', sessionStorageKeys[k]);
+              break;
+            }
+          }
+        }
+      } catch(e) {
+        console.log('❌ Error checking sessionStorage key:', sessionStorageKeys[k], e.message);
       }
-    });
+    }
   }
   
-  console.log('🔍 CSRF Token Status:');
-  console.log('  Found:', !!csrf);
-  console.log('  Source:', csrfSource);
-  if (csrf) {
-    console.log('  Preview:', csrf.substring(0, 50) + '...');
+  // Method 4: Check for JWT in page scripts or window objects
+  if (!auth) {
+    try {
+      if (window.auth) {
+        auth = window.auth;
+        tokenSource = 'window.auth';
+        console.log('✅ Found auth in window.auth');
+      } else if (window.authToken) {
+        auth = window.authToken;
+        tokenSource = 'window.authToken';
+        console.log('✅ Found auth in window.authToken');
+      }
+    } catch(e) {
+      console.log('❌ Error checking window objects:', e.message);
+    }
   }
   
-  // For Simplify, we might not need a separate auth token
-  // The authentication might be handled by cookies automatically
-  var auth = csrf; // Use CSRF as auth token (based on your network trace)
-  var authSource = 'csrf-as-auth';
+  console.log('🔍 Final Token Status:');
+  console.log('  CSRF:', !!csrf, csrf ? '(found)' : '(missing)');
+  console.log('  Auth:', !!auth, auth ? '(found from ' + tokenSource + ')' : '(missing)');
+  if (auth) {
+    console.log('  Auth preview:', auth.substring(0, 30) + '...');
+  }
   
-  console.log('🔍 Auth Token Status:');
-  console.log('  Using CSRF as auth:', !!auth);
-  console.log('  Source:', authSource);
-  
-  if (!csrf) {
-    var errorMsg = 'CSRF token not found!\\n\\n';
-    errorMsg += 'Available cookies: ' + Object.keys(cookies).join(', ') + '\\n\\n';
-    errorMsg += 'Make sure you are logged into Simplify Jobs and try again.';
-    alert('❌ ' + errorMsg);
+  if (!auth || !csrf) {
+    var detailedError = 'Missing tokens:\\n\\n';
+    detailedError += 'CSRF Token: ' + (csrf ? '✅ Found' : '❌ Missing') + '\\n';
+    detailedError += 'Auth Token: ' + (auth ? '✅ Found from ' + tokenSource : '❌ Missing') + '\\n\\n';
+    detailedError += 'Available cookies: ' + Object.keys(cookies).join(', ') + '\\n\\n';
+    detailedError += 'Make sure you are logged into Simplify Jobs and try again.';
+    
+    alert('❌ ' + detailedError);
     return;
   }
   
@@ -384,7 +463,7 @@ try {
     authorization: auth,
     url: location.href,
     timestamp: new Date().toISOString(),
-    token_source: 'csrf:' + csrfSource + ', auth:' + authSource
+    token_source: tokenSource
   };
   
   fetch(apiUrl + '/api/simplify/auto-capture', {
@@ -408,11 +487,11 @@ try {
   })
   .then(function(result) {
     console.log('✅ Success:', result);
-    alert('✅ Tokens captured successfully!\\n\\nCSRF Source: ' + csrfSource + '\\n\\nGo back to JobTrak and refresh the modal.');
+    alert('✅ Tokens captured successfully!\\n\\nAuth source: ' + tokenSource + '\\n\\nGo back to JobTrak and refresh the modal.');
   })
   .catch(function(error) {
     console.error('❌ Error:', error);
-    alert('❌ Failed to capture tokens:\\n\\n' + error.message + '\\n\\nCSRF was found from: ' + csrfSource);
+    alert('❌ Failed to capture tokens:\\n\\n' + error.message + '\\n\\nToken was found from: ' + tokenSource);
   });
   
 } catch(error) {
