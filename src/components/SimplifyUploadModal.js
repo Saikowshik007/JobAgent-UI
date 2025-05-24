@@ -289,16 +289,6 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
             </svg>
           </button>
         </div>
-
-        {/* Debug Info */}
-        <div className="mb-4 p-3 bg-gray-100 rounded text-xs">
-          <p><strong>Debug Info:</strong></p>
-          <p>User: {currentUser?.uid}</p>
-          <p>Resume: {resumeData ? '✅ Loaded' : '❌ Not loaded'}</p>
-          <p>Session: {sessionStatus?.has_session ? (sessionStatus?.is_valid ? '✅ Valid' : '❌ Invalid') : '❌ None'}</p>
-          <p>Status: {status}</p>
-        </div>
-
         {/* Checking Status */}
         {status === 'checking' && (
           <div className="text-center py-8">
