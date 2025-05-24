@@ -344,7 +344,6 @@ export const jobsApi = {
 };
 
 // Enhanced Simplify API with hybrid authentication approach
-// Enhanced Simplify API with simplified token management
 export const simplifyApi = {
   /**
    * Store both CSRF and authorization tokens
