@@ -143,17 +143,51 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     cookies: ''
   });
   const [resumeData, setResumeData] = useState(null);
-  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState(null);
   const { currentUser } = useAuth();
 
-  // Fetch resume data when modal opens
+  // Fetch resume data and check session when modal opens
   useEffect(() => {
     if (isOpen && resumeId && !resumeData) {
       fetchResumeData();
     }
+    if (isOpen) {
+      checkExistingSession();
+    }
   }, [isOpen, resumeId]);
 
-  const fetchResumeData = async () => {
+  const checkExistingSession = async () => {
+    try {
+      console.log('Checking for existing Simplify session...');
+      const sessionCheck = await simplifyApi.checkSession();
+      setSessionStatus(sessionCheck);
+
+      if (sessionCheck.has_session) {
+        console.log('Existing session found! Skipping to upload step.');
+        console.log(`Session age: ${sessionCheck.session_age_hours?.toFixed(1)} hours`);
+
+        // Skip directly to step 3 (upload)
+        setStep(3);
+        setStatus('ready');
+
+        // Show user the session info
+        if (sessionCheck.session_age_hours) {
+          const hoursAgo = sessionCheck.session_age_hours.toFixed(1);
+          setError(''); // Clear any previous errors
+          // You could show a positive message instead
+          console.log(`Using existing session from ${hoursAgo} hours ago`);
+        }
+      } else {
+        console.log('No existing session found, user needs to provide tokens');
+        setStep(1); // Start from login step
+      }
+    } catch (err) {
+      console.error('Error checking existing session:', err);
+      setSessionStatus({ has_session: false, error: err.message });
+      // If check fails, just start from step 1
+      setStep(1);
+    }
+  };
     try {
       console.log('Fetching resume YAML for PDF generation...');
       const yamlContent = await jobsApi.getResumeYaml(resumeId);
@@ -308,20 +342,33 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
           <p>Resume ID: {resumeId}</p>
           <p>Job ID: {jobId}</p>
           <p>Resume Data: {resumeData ? '✓ Loaded' : '✗ Not loaded'}</p>
-          <button
-            onClick={testApiConnection}
-            className="mt-2 px-2 py-1 bg-blue-500 text-white rounded text-xs mr-2"
-          >
-            Test API Connection
-          </button>
-          {!resumeData && (
+          <p>Session Status: {sessionStatus ? (
+            sessionStatus.has_session ?
+              `✓ Active (${sessionStatus.session_age_hours?.toFixed(1)}h old)` :
+              '✗ No session'
+          ) : '⏳ Checking...'}</p>
+          <div className="mt-2 space-x-2">
             <button
-              onClick={fetchResumeData}
-              className="mt-2 px-2 py-1 bg-green-500 text-white rounded text-xs"
+              onClick={testApiConnection}
+              className="px-2 py-1 bg-blue-500 text-white rounded text-xs"
             >
-              Retry Load Resume
+              Test API Connection
             </button>
-          )}
+            {!resumeData && (
+              <button
+                onClick={fetchResumeData}
+                className="px-2 py-1 bg-green-500 text-white rounded text-xs"
+              >
+                Retry Load Resume
+              </button>
+            )}
+            <button
+              onClick={checkExistingSession}
+              className="px-2 py-1 bg-purple-500 text-white rounded text-xs"
+            >
+              Check Session
+            </button>
+          </div>
         </div>
 
         {/* Step Progress */}
@@ -446,7 +493,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
 
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-green-800">
-                ✓ Session captured successfully! Ready to generate and upload your resume PDF.
+                ✓ Session ready! Your Simplify authentication is valid and ready to upload your resume PDF.
               </p>
             </div>
 
@@ -483,12 +530,20 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
             </button>
 
             {status !== 'success' && (
-              <button
-                onClick={() => setStep(2)}
-                className="w-full py-2 px-4 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
-              >
-                Back to Edit Session
-              </button>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setStep(2)}
+                  className="flex-1 py-2 px-4 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                >
+                  Update Session
+                </button>
+                <button
+                  onClick={checkExistingSession}
+                  className="flex-1 py-2 px-4 border border-blue-300 rounded text-blue-700 hover:bg-blue-50"
+                >
+                  Refresh Session Status
+                </button>
+              </div>
             )}
           </div>
         )}
