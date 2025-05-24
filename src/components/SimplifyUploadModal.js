@@ -143,6 +143,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     cookies: ''
   });
   const [resumeData, setResumeData] = useState(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const [sessionStatus, setSessionStatus] = useState(null);
   const { currentUser } = useAuth();
 
@@ -174,7 +175,6 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         if (sessionCheck.session_age_hours) {
           const hoursAgo = sessionCheck.session_age_hours.toFixed(1);
           setError(''); // Clear any previous errors
-          // You could show a positive message instead
           console.log(`Using existing session from ${hoursAgo} hours ago`);
         }
       } else {
@@ -188,6 +188,8 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
       setStep(1);
     }
   };
+
+  const fetchResumeData = async () => {
     try {
       console.log('Fetching resume YAML for PDF generation...');
       const yamlContent = await jobsApi.getResumeYaml(resumeId);
