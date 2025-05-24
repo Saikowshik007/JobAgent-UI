@@ -165,11 +165,15 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         await fetchResumeData();
       }
 
-      if (sessionCheck.has_session && sessionCheck.session_age_hours < 24) {
-        console.log('✅ Valid session found! Ready to upload.');
+      if (sessionCheck.has_session && sessionCheck.is_valid && sessionCheck.session_age_hours < 24) {
+        console.log('✅ Valid and verified session found! Ready to upload.');
         setStatus('ready');
       } else {
-        console.log('❌ No valid session found. Need authentication.');
+        if (sessionCheck.has_session && !sessionCheck.is_valid) {
+          console.log('❌ Session found but tokens are invalid. Need re-authentication.');
+        } else {
+          console.log('❌ No valid session found. Need authentication.');
+        }
         setStatus('need-auth');
       }
     } catch (err) {
@@ -291,7 +295,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
           <p><strong>Debug Info:</strong></p>
           <p>User: {currentUser?.uid}</p>
           <p>Resume: {resumeData ? '✅ Loaded' : '❌ Not loaded'}</p>
-          <p>Session: {sessionStatus?.has_session ? '✅ Active' : '❌ None'}</p>
+          <p>Session: {sessionStatus?.has_session ? (sessionStatus?.is_valid ? '✅ Valid' : '❌ Invalid') : '❌ None'}</p>
           <p>Status: {status}</p>
         </div>
 
@@ -309,7 +313,9 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <h4 className="font-medium text-yellow-800 mb-2">🔐 Authentication Required</h4>
               <p className="text-sm text-yellow-700">
-                Please provide your Simplify.jobs authentication tokens to upload your resume.
+                {sessionStatus?.has_session && !sessionStatus?.is_valid
+                  ? 'Your stored tokens have expired or are invalid. Please provide fresh authentication tokens.'
+                  : 'Please provide your Simplify.jobs authentication tokens to upload your resume.'}
               </p>
             </div>
 
