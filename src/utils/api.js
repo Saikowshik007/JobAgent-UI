@@ -348,19 +348,7 @@ export const simplifyApi = {
   // Check if user has captured CSRF token
   async checkSession() {
     const response = await fetch(`${API_BASE_URL}/api/simplify/check-session`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': getCurrentUserId()
-      },
-      credentials: 'include'
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to check session: ${response.statusText}`);
-    }
-
-    return response.json();
+return apiRequest('/api/simplify/check-session');
   },
 
   // Get upload configuration for frontend upload
