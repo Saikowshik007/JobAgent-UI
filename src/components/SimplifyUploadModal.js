@@ -401,90 +401,12 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
               </p>
               <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300 mb-3">
                 <a
-                  href={`javascript:(function(){
-                    console.log('JobTrak: Starting token capture...');
-
-                    // Get all cookies as object
-                    const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-                      const [key, value] = cookie.trim().split('=');
-                      if (key && value) acc[key] = decodeURIComponent(value);
-                      return acc;
-                    }, {});
-
-                    console.log('JobTrak: Found cookies:', Object.keys(cookies));
-
-                    // Extract tokens with multiple fallback methods
-                    const auth = cookies.authorization ||
-                                localStorage.getItem('authorization') ||
-                                sessionStorage.getItem('authorization') ||
-                                localStorage.getItem('auth_token') ||
-                                sessionStorage.getItem('auth_token');
-
-                    const csrf = cookies.csrf ||
-                                cookies['csrf-token'] ||
-                                cookies._token ||
-                                localStorage.getItem('csrf') ||
-                                sessionStorage.getItem('csrf') ||
-                                document.querySelector('meta[name="csrf-token"]')?.content ||
-                                document.querySelector('input[name="_token"]')?.value;
-
-                    console.log('JobTrak: Auth token found:', !!auth);
-                    console.log('JobTrak: CSRF token found:', !!csrf);
-
-                    if (!auth) {
-                      alert('❌ Authorization token not found. Make sure you are logged into Simplify Jobs.');
-                      console.log('JobTrak: Available cookies:', Object.keys(cookies));
-                      return;
-                    }
-
-                    if (!csrf) {
-                      alert('❌ CSRF token not found. Make sure you are logged into Simplify Jobs.');
-                      console.log('JobTrak: Available cookies:', Object.keys(cookies));
-                      return;
-                    }
-
-                    // Send to JobTrak API
-                    const apiUrl = '${process.env.REACT_APP_API_BASE_URL || window.location.origin}/api/simplify/auto-capture';
-                    console.log('JobTrak: Sending to:', apiUrl);
-
-                    fetch(apiUrl, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'X-User-Id': 'bookmarklet-user'
-                      },
-                      credentials: 'include',
-                      body: JSON.stringify({
-                        cookies: document.cookie,
-                        csrf: csrf,
-                        authorization: auth,
-                        url: window.location.href,
-                        timestamp: new Date().toISOString(),
-                        debug: {
-                          cookieKeys: Object.keys(cookies),
-                          domain: window.location.hostname
-                        }
-                      })
-                    }).then(response => {
-                      console.log('JobTrak: Response status:', response.status);
-                      if (response.ok) {
-                        alert('✅ Tokens captured successfully! Go back to JobTrak and refresh.');
-                      } else {
-                        response.text().then(text => {
-                          alert('❌ Failed to capture tokens: ' + text);
-                          console.log('JobTrak: Error response:', text);
-                        });
-                      }
-                    }).catch(error => {
-                      console.error('JobTrak: Fetch error:', error);
-                      alert('❌ Network error: ' + error.message);
-                    });
-                  })();`}
+                  href="javascript:(function(){var c=document.cookie.split(';').reduce((a,x)=>{var p=x.trim().split('=');if(p[0]&&p[1])a[p[0]]=decodeURIComponent(p[1]);return a;},{});var auth=c.authorization;var csrf=c.csrf;if(!auth||!csrf){alert('Tokens not found. Check console.');console.log('Available cookies:',Object.keys(c));return;}fetch('https://jobtrackai.duckdns.org/api/simplify/auto-capture',{method:'POST',headers:{'Content-Type':'application/json','X-User-Id':'bookmarklet'},credentials:'include',body:JSON.stringify({cookies:document.cookie,csrf:csrf,authorization:auth,url:location.href,timestamp:new Date().toISOString()})}).then(r=>r.ok?alert('✅ Tokens captured!'):alert('❌ Failed')).catch(e=>alert('❌ Error: '+e.message));})();"
                   className="inline-block px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium cursor-move select-all"
                   draggable="true"
                   onClick={(e) => e.preventDefault()}
                 >
-                  📌 JobTrak Token Capture
+                  📌 JobTrak Token Capture (Fixed)
                 </a>
               </div>
               <div className="text-xs text-purple-600 space-y-1">
