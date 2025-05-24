@@ -1,4 +1,135 @@
-// Updated React Component with hybrid approach
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { simplifyApi, jobsApi } from '../utils/api';
+import { pdf } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Font, Link } from '@react-pdf/renderer';
+import yaml from 'js-yaml';
+
+// Register fonts for PDF generation
+Font.register({
+  family: 'Calibri',
+  fonts: [
+    { src: '/fonts/calibri.ttf' },
+    { src: '/fonts/calibrib.ttf', fontWeight: 'bold' },
+    { src: '/fonts/calibrii.ttf', fontStyle: 'italic' },
+  ]
+});
+
+// PDF styles
+const styles = StyleSheet.create({
+  page: {
+    paddingTop: 40,
+    paddingBottom: 40,
+    paddingHorizontal: 50,
+    fontSize: 10,
+    fontFamily: 'Calibri',
+    lineHeight: 1.3,
+  },
+  header: { fontSize: 13, textAlign: 'center', fontWeight: 'bold', marginBottom: 2, textTransform: 'uppercase' },
+  contact: { textAlign: 'center', fontSize: 9, marginBottom: 8 },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    marginTop: 8,
+    marginBottom: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: '#000000',
+    borderBottomStyle: 'solid',
+    paddingBottom: 1,
+  },
+  jobBlock: { marginBottom: 6 },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  jobTitle: { fontStyle: 'italic' },
+  bullet: { marginLeft: 10, marginBottom: 1 },
+  textNormal: { marginBottom: 3 },
+  projectTitle: { fontWeight: 'bold', color: 'blue', textDecoration: 'none' },
+});
+
+// PDF Document component
+const ResumeDocument = ({ data }) => (
+  <Document>
+    <Page size="A4" style={styles.page}>
+      {data.basic && (
+        <>
+          <Text style={styles.header}>{data.basic.name}</Text>
+          <Text style={styles.contact}>
+            {[data.basic.email, data.basic.phone, ...(data.basic.websites || [])].filter(Boolean).join(' | ')}
+          </Text>
+        </>
+      )}
+
+      {data.objective && (
+        <>
+          <Text style={styles.sectionTitle}>Objective</Text>
+          <Text style={styles.textNormal}>{data.objective}</Text>
+        </>
+      )}
+
+      {data.experiences && (
+        <>
+          <Text style={styles.sectionTitle}>Experience</Text>
+          {data.experiences.map((exp, idx) => (
+            <View key={idx} style={styles.jobBlock}>
+              <View style={styles.row}>
+                <Text style={{ fontWeight: 'bold' }}>{exp.company}</Text>
+                <Text>{exp.titles?.[0]?.startdate} - {exp.titles?.[0]?.enddate}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.jobTitle}>{exp.titles?.[0]?.name}</Text>
+                <Text style={styles.jobTitle}>{exp.location}</Text>
+              </View>
+              {exp.highlights?.map((point, i) => (
+                <Text key={i} style={styles.bullet}>• {point}</Text>
+              ))}
+            </View>
+          ))}
+        </>
+      )}
+
+      {data.projects && (
+        <>
+          <Text style={styles.sectionTitle}>Projects</Text>
+          {data.projects.map((proj, idx) => (
+            <View key={idx} style={styles.jobBlock}>
+              {proj.link ? (
+                <Link src={proj.link} style={styles.projectTitle}>{proj.name}</Link>
+              ) : (
+                <Text style={{ fontWeight: 'bold' }}>{proj.name}</Text>
+              )}
+              {proj.highlights?.map((point, i) => (
+                <Text key={i} style={styles.bullet}>• {point}</Text>
+              ))}
+            </View>
+          ))}
+        </>
+      )}
+
+      {data.education && (
+        <>
+          <Text style={styles.sectionTitle}>Education</Text>
+          {data.education.map((edu, idx) => (
+            <View key={idx} style={styles.jobBlock}>
+              <View style={styles.row}>
+                <Text style={{ fontWeight: 'bold' }}>{edu.school}, {edu.degrees?.[0]?.names?.join(', ')}</Text>
+                <Text>{edu.degrees?.[0]?.dates}</Text>
+              </View>
+            </View>
+          ))}
+        </>
+      )}
+
+      {data.skills && (
+        <>
+          <Text style={styles.sectionTitle}>Skills</Text>
+          {data.skills.map((s, idx) => (
+            <Text key={idx}><Text style={{ fontWeight: 'bold' }}>{s.category}:</Text> {s.skills.join(', ')}</Text>
+          ))}
+        </>
+      )}
+    </Page>
+  </Document>
+);
 const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
   const [status, setStatus] = useState('checking'); // checking, need-auth, ready, uploading, success, error
   const [error, setError] = useState('');
