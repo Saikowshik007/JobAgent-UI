@@ -150,27 +150,6 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     }
   }, [isOpen, resumeId]);
 
-  // Listen for CSRF token from bookmarklet
-  useEffect(() => {
-    const handleMessage = (event) => {
-      // Accept messages from any origin for CSRF tokens (they're not sensitive)
-      if (event.data && event.data.type === 'CSRF_TOKEN_CAPTURED') {
-        console.log('✅ Received CSRF token via postMessage:', event.data.token?.substring(0, 20) + '...');
-        console.log('Message origin:', event.origin);
-        
-        // Store the token locally for this session
-        setCsrfToken(event.data.token);
-        localStorage.setItem('jobtrak_simplify_csrf', event.data.token);
-        localStorage.setItem('jobtrak_simplify_csrf_captured_at', new Date().toISOString());
-        
-        setStatus('ready');
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
-
   const checkTokensAndLoadData = async () => {
     try {
       console.log('🔍 Checking for stored CSRF token and loading resume data...');
