@@ -343,144 +343,133 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         {/* Need Tokens */}
         {status === 'need-tokens' && (
           <div className="space-y-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h4 className="font-medium text-yellow-800 mb-2">🔐 Authentication Required</h4>
-              <p className="text-sm text-yellow-700">
-                We need to get your CSRF token from Simplify. This will be fully automated.
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-medium text-blue-800 mb-2">🔑 Get Your CSRF Token</h4>
+              <p className="text-sm text-blue-700">
+                We need your CSRF token from Simplify to upload resumes. This is a 30-second process.
               </p>
             </div>
 
-            {/* Auto-Injection Method */}
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4">
-              <h5 className="font-medium text-blue-800 mb-3">🚀 Automated Token Capture</h5>
-              
-              <div className="space-y-3">
-                <p className="text-sm text-blue-700">
-                  Click the button below to open Simplify and automatically capture your CSRF token:
-                </p>
-                
-                <button
-                  onClick={() => {
-                    // Open Simplify in a new window and inject our script
-                    const simplifyWindow = window.open('https://simplify.jobs', 'simplify', 'width=800,height=600');
-                    
-                    // Wait for the window to load, then inject our script
-                    const checkLoaded = setInterval(() => {
-                      try {
-                        if (simplifyWindow.document && simplifyWindow.document.readyState === 'complete') {
-                          clearInterval(checkLoaded);
-                          
-                          // Inject our token capture script
-                          const script = simplifyWindow.document.createElement('script');
-                          script.textContent = `
-                            (function() {
-                              console.log('🔍 JobTrak CSRF Auto-Capture...');
-                              
-                              function captureToken() {
-                                const csrfCookie = document.cookie.split(';')
-                                  .find(c => c.trim().startsWith('csrf='));
-                                
-                                if (csrfCookie) {
-                                  const token = csrfCookie.split('=')[1];
-                                  console.log('✅ CSRF token found:', token.substring(0, 20) + '...');
-                                  
-                                  // Send to parent window
-                                  if (window.opener) {
-                                    window.opener.postMessage({
-                                      type: 'CSRF_TOKEN_CAPTURED',
-                                      token: token,
-                                      source: 'auto-inject'
-                                    }, '*');
-                                    
-                                    // Show success and close
-                                    alert('✅ CSRF token captured successfully!\\nReturning to JobTrak...');
-                                    window.close();
-                                  }
-                                } else {
-                                  console.log('❌ CSRF token not found, retrying...');
-                                  setTimeout(captureToken, 1000);
-                                }
-                              }
-                              
-                              // Try immediately and then retry if needed
-                              setTimeout(captureToken, 1000);
-                            })();
-                          `;
-                          simplifyWindow.document.head.appendChild(script);
-                        }
-                      } catch (e) {
-                        // Cross-origin restriction, try again
-                        console.log('Waiting for Simplify to load...');
-                      }
-                    }, 500);
-                    
-                    // Fallback: close the interval after 30 seconds
-                    setTimeout(() => clearInterval(checkLoaded), 30000);
-                  }}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 font-medium"
-                >
-                  🚀 Open Simplify & Auto-Capture Token
-                </button>
-                
-                <div className="text-xs text-blue-600 bg-blue-50 p-3 rounded">
-                  <p><strong>How it works:</strong></p>
-                  <ul className="list-disc ml-4 space-y-1">
-                    <li>Opens Simplify.jobs in a popup window</li>
-                    <li>Automatically injects a script to capture your CSRF token</li>
-                    <li>Sends the token back to JobTrak via secure messaging</li>
-                    <li>Closes the popup and returns you here</li>
-                  </ul>
-                  <p className="mt-2 font-medium">
-                    💡 Your HttpOnly authorization cookie stays secure in your browser!
-                  </p>
+            <div className="bg-white border-2 border-gray-200 rounded-lg p-4">
+              <div className="space-y-4">
+                {/* Step 1 */}
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Open Simplify.jobs in a new tab</p>
+                    <button
+                      onClick={() => window.open('https://simplify.jobs', '_blank')}
+                      className="mt-1 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                    >
+                      Open Simplify →
+                    </button>
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Open browser console (F12 → Console tab)</p>
+                  </div>
+                </div>
+
+                {/* Step 3 */}
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Copy and paste this command:</p>
+                    <div className="mt-2 bg-gray-900 text-green-400 p-3 rounded font-mono text-sm relative group">
+                      <code>
+                        {`(() => {
+  const csrf = document.cookie.split(';').find(c => c.trim().startsWith('csrf='));
+  if (csrf) {
+    const token = csrf.split('=')[1];
+    console.log('✅ Token:', token);
+    navigator.clipboard && navigator.clipboard.writeText(token);
+    return token;
+  } else {
+    console.log('❌ Not logged in');
+    return null;
+  }
+})()`}
+                      </code>
+                      <button
+                        onClick={() => {
+                          const script = `(() => {
+  const csrf = document.cookie.split(';').find(c => c.trim().startsWith('csrf='));
+  if (csrf) {
+    const token = csrf.split('=')[1];
+    console.log('✅ Token:', token);
+    navigator.clipboard && navigator.clipboard.writeText(token);
+    return token;
+  } else {
+    console.log('❌ Not logged in');
+    return null;
+  }
+})()`;
+                          navigator.clipboard.writeText(script);
+                        }}
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 bg-gray-700 text-white text-xs rounded hover:bg-gray-600"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step 4 */}
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">4</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Paste the token result here:</p>
+                    <div className="mt-2 flex space-x-2">
+                      <input
+                        type="text"
+                        placeholder="Paste your CSRF token here..."
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                        value={csrfToken || ''}
+                        onChange={(e) => {
+                          const token = e.target.value.trim();
+                          setCsrfToken(token);
+                          if (token.length > 20) {
+                            localStorage.setItem('jobtrak_simplify_csrf', token);
+                            localStorage.setItem('jobtrak_simplify_csrf_captured_at', new Date().toISOString());
+                            console.log('✅ CSRF token saved:', token.substring(0, 20) + '...');
+                            setStatus('ready');
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Fallback Bookmarklet */}
+            {/* Help Section */}
             <details className="bg-gray-50 border border-gray-200 rounded-lg">
-              <summary className="p-4 cursor-pointer font-medium text-gray-700 hover:bg-gray-100">
-                📌 Alternative: Manual Bookmarklet
+              <summary className="p-3 cursor-pointer text-sm font-medium text-gray-700 hover:bg-gray-100">
+                💡 Need help? Click here
               </summary>
-              <div className="p-4 pt-0 space-y-3">
-                <p className="text-sm text-gray-600">
-                  If the auto-capture doesn't work, use this bookmarklet:
-                </p>
-                
-                <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300">
-                  <button
-                    onClick={() => {
-                      const bookmarkletCode = `javascript:(function(){
-                        var csrf = document.cookie.split(';').find(c => c.trim().startsWith('csrf='));
-                        if (csrf) {
-                          var token = csrf.split('=')[1];
-                          window.opener && window.opener.postMessage({
-                            type: 'CSRF_TOKEN_CAPTURED',
-                            token: token,
-                            source: 'bookmarklet'
-                          }, '*');
-                          alert('Token sent to JobTrak!');
-                        } else {
-                          alert('No CSRF token found!');
-                        }
-                      })();`;
-                      
-                      navigator.clipboard.writeText(bookmarkletCode).then(() => {
-                        alert('Bookmarklet copied to clipboard!\\n\\n1. Go to simplify.jobs\\n2. Paste this in the address bar\\n3. Press Enter');
-                      });
-                    }}
-                    className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium"
-                  >
-                    📋 Copy Bookmarklet Code
-                  </button>
-                </div>
+              <div className="p-3 pt-0 text-sm text-gray-600 space-y-2">
+                <p><strong>Console script not working?</strong></p>
+                <p>Try this simpler one-liner:</p>
+                <code className="bg-gray-800 text-green-400 p-2 rounded block font-mono text-xs">
+                  document.cookie.split(';').find(c=>c.includes('csrf=')).split('=')[1]
+                </code>
+                <p><strong>Still having issues?</strong></p>
+                <ul className="list-disc ml-4 space-y-1">
+                  <li>Make sure you're logged into simplify.jobs</li>
+                  <li>Try refreshing the Simplify page and running the script again</li>
+                  <li>The token should be a long string (100+ characters)</li>
+                </ul>
               </div>
             </details>
 
             <div className="flex space-x-3">
               <button
                 onClick={retryCheck}
-                className="flex-1 py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="flex-1 py-2 px-4 bg-gray-600 text-white rounded hover:bg-gray-700"
               >
                 Check Status
               </button>
