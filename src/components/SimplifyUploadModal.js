@@ -392,9 +392,65 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         {step === 1 && (
           <div className="space-y-4">
             <h4 className="font-medium text-lg">Step 1: Login to Simplify Jobs</h4>
+
+            {/* Bookmarklet Option */}
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 rounded-lg p-4">
+              <h5 className="font-medium text-purple-800 mb-2">🚀 Quick Setup (Recommended)</h5>
+              <p className="text-sm text-purple-700 mb-3">
+                Drag this bookmarklet to your bookmarks bar for one-click token capture:
+              </p>
+              <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300 mb-3">
+                <a
+                  href={`javascript:(function(){
+                    const c=document.cookie;
+                    const csrf=document.querySelector('meta[name="csrf-token"]')?.content||
+                              document.querySelector('[name="csrf-token"]')?.value||
+                              localStorage.getItem('csrf')||
+                              sessionStorage.getItem('csrf')||
+                              c.match(/csrf=([^;]+)/)?.[1];
+                    const auth=localStorage.getItem('authorization')||
+                               sessionStorage.getItem('authorization')||
+                               c.match(/authorization=([^;]+)/)?.[1];
+                    if(!auth||!csrf){
+                      alert('❌ Could not find tokens. Make sure you are logged into Simplify Jobs.');
+                      return;
+                    }
+                    fetch('${process.env.REACT_APP_API_BASE_URL || window.location.origin}/api/simplify/auto-capture',{
+                      method:'POST',
+                      headers:{'Content-Type':'application/json'},
+                      credentials:'include',
+                      body:JSON.stringify({
+                        cookies:c,
+                        csrf:csrf,
+                        authorization:auth,
+                        url:window.location.href,
+                        timestamp:new Date().toISOString()
+                      })
+                    }).then(r=>r.ok?alert('✅ Tokens captured! Go back to JobTrak and refresh.'):alert('❌ Failed to capture tokens: '+r.statusText)).catch(e=>alert('❌ Error: '+e.message));
+                  })();`}
+                  className="inline-block px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium cursor-move select-all"
+                  draggable="true"
+                  onClick={(e) => e.preventDefault()}
+                >
+                  📌 JobTrak Token Capture
+                </a>
+              </div>
+              <div className="text-xs text-purple-600 space-y-1">
+                <p><strong>Instructions:</strong></p>
+                <ol className="list-decimal ml-4 space-y-1">
+                  <li>Drag the purple button above to your bookmarks bar</li>
+                  <li>Login to Simplify Jobs in another tab</li>
+                  <li>Click the bookmark while on Simplify.jobs</li>
+                  <li>Come back here and refresh session status</li>
+                </ol>
+              </div>
+            </div>
+
+            {/* Manual Option */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h5 className="font-medium text-blue-800 mb-2">Manual Method</h5>
               <p className="text-sm text-blue-800 mb-3">
-                Please login to Simplify Jobs in a new tab, then come back here.
+                Or login manually and capture tokens in the next step:
               </p>
               <button
                 onClick={() => window.open('https://simplify.jobs/auth/login', '_blank')}
@@ -403,12 +459,21 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
                 Open Simplify Login (New Tab)
               </button>
             </div>
-            <button
-              onClick={() => setStep(2)}
-              className="w-full py-2 px-4 bg-green-600 text-white rounded hover:bg-green-700"
-            >
-              I'm Logged In - Continue
-            </button>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setStep(2)}
+                className="flex-1 py-2 px-4 bg-gray-600 text-white rounded hover:bg-gray-700"
+              >
+                Use Manual Method
+              </button>
+              <button
+                onClick={checkExistingSession}
+                className="flex-1 py-2 px-4 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Check if Tokens Captured
+              </button>
+            </div>
           </div>
         )}
 
