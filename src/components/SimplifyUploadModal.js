@@ -139,6 +139,102 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
   const [sessionStatus, setSessionStatus] = useState(null);
   const [csrfToken, setCsrfToken] = useState('');
   const [authToken, setAuthToken] = useState('');
+  const { currentUser } = useAuth();Decoration: 'none' },
+});
+
+// PDF Document component
+const ResumeDocument = ({ data }) => (
+  <Document>
+    <Page size="A4" style={styles.page}>
+      {data.basic && (
+        <>
+          <Text style={styles.header}>{data.basic.name}</Text>
+          <Text style={styles.contact}>
+            {[data.basic.email, data.basic.phone, ...(data.basic.websites || [])].filter(Boolean).join(' | ')}
+          </Text>
+        </>
+      )}
+
+      {data.objective && (
+        <>
+          <Text style={styles.sectionTitle}>Objective</Text>
+          <Text style={styles.textNormal}>{data.objective}</Text>
+        </>
+      )}
+
+      {data.experiences && (
+        <>
+          <Text style={styles.sectionTitle}>Experience</Text>
+          {data.experiences.map((exp, idx) => (
+            <View key={idx} style={styles.jobBlock}>
+              <View style={styles.row}>
+                <Text style={{ fontWeight: 'bold' }}>{exp.company}</Text>
+                <Text>{exp.titles?.[0]?.startdate} - {exp.titles?.[0]?.enddate}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.jobTitle}>{exp.titles?.[0]?.name}</Text>
+                <Text style={styles.jobTitle}>{exp.location}</Text>
+              </View>
+              {exp.highlights?.map((point, i) => (
+                <Text key={i} style={styles.bullet}>• {point}</Text>
+              ))}
+            </View>
+          ))}
+        </>
+      )}
+
+      {data.projects && (
+        <>
+          <Text style={styles.sectionTitle}>Projects</Text>
+          {data.projects.map((proj, idx) => (
+            <View key={idx} style={styles.jobBlock}>
+              {proj.link ? (
+                <Link src={proj.link} style={styles.projectTitle}>{proj.name}</Link>
+              ) : (
+                <Text style={{ fontWeight: 'bold' }}>{proj.name}</Text>
+              )}
+              {proj.highlights?.map((point, i) => (
+                <Text key={i} style={styles.bullet}>• {point}</Text>
+              ))}
+            </View>
+          ))}
+        </>
+      )}
+
+      {data.education && (
+        <>
+          <Text style={styles.sectionTitle}>Education</Text>
+          {data.education.map((edu, idx) => (
+            <View key={idx} style={styles.jobBlock}>
+              <View style={styles.row}>
+                <Text style={{ fontWeight: 'bold' }}>{edu.school}, {edu.degrees?.[0]?.names?.join(', ')}</Text>
+                <Text>{edu.degrees?.[0]?.dates}</Text>
+              </View>
+            </View>
+          ))}
+        </>
+      )}
+
+      {data.skills && (
+        <>
+          <Text style={styles.sectionTitle}>Skills</Text>
+          {data.skills.map((s, idx) => (
+            <Text key={idx}><Text style={{ fontWeight: 'bold' }}>{s.category}:</Text> {s.skills.join(', ')}</Text>
+          ))}
+        </>
+      )}
+    </Page>
+  </Document>
+);
+
+const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
+  const [status, setStatus] = useState('checking'); // checking, need-auth, ready, uploading, success, error
+  const [error, setError] = useState('');
+  const [resumeData, setResumeData] = useState(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState(null);
+  const [csrfToken, setCsrfToken] = useState('');
+  const [authToken, setAuthToken] = useState('');
   const { currentUser } = useAuth();
 
   // Auto-check session and load resume data when modal opens
@@ -236,6 +332,23 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     }
   };
 
+  const generatePdfBlob = async () => {
+    if (!resumeData) {
+      throw new Error('Resume data not available');
+    }
+
+    setGeneratingPdf(true);
+    console.log('🔄 Generating PDF from resume data...');
+
+    try {
+      const pdfBlob = await pdf(<ResumeDocument data={resumeData} />).toBlob();
+      console.log('✅ PDF generated successfully, size:', pdfBlob.size, 'bytes');
+      return pdfBlob;
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   const uploadToSimplifyViaBackend = async () => {
     setStatus('uploading');
     setError('');
@@ -243,12 +356,12 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     try {
       console.log('🚀 Starting upload via backend...');
 
-      // Generate PDF
+      // Generate PDF in frontend
       const pdfBlob = await generatePdfBlob();
 
-      console.log('📤 Uploading via backend proxy...');
+      console.log('📤 Uploading PDF via backend proxy...');
 
-      // Upload via backend using the API method
+      // Upload PDF via backend using the API method
       const result = await simplifyApi.uploadResumeToSimplify(pdfBlob, resumeId, jobId);
 
       console.log('✅ Backend upload successful:', result);
