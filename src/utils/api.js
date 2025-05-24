@@ -1,7 +1,7 @@
-// src/utils/api.js - Client-side API calls
+// src/utils/api.js - Client-side API calls with improved CORS handling
 import { auth } from '../firebase/firebase';
 
-// API Base URL - configured for DuckDNS
+// API Base URL - configured for DuckDNS with fallback
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL ||
   (process.env.NODE_ENV === 'production'
     ? 'https://jobtrackai.duckdns.org'  // Your DuckDNS domain
@@ -10,13 +10,42 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL ||
 
 // Helper to log headers for debugging
 function logHeaders(headers) {
-  console.log("API Request Headers:");
-  for (const [key, value] of Object.entries(headers)) {
-    console.log(`  ${key}: ${value}`);
+  if (process.env.NODE_ENV === 'development') {
+    console.log("API Request Headers:");
+    for (const [key, value] of Object.entries(headers)) {
+      console.log(`  ${key}: ${value}`);
+    }
   }
 }
 
-// Generic API request function with authentication
+// Enhanced error handling
+function handleApiError(error, endpoint) {
+  console.error(`API request to ${endpoint} failed:`, error);
+
+  // Network connectivity issues
+  if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    throw new Error('Unable to connect to API server. Please check your connection and try again.');
+  }
+
+  // CORS specific errors
+  if (error.message.includes('CORS') || error.message.includes('Cross-Origin')) {
+    throw new Error('CORS error: Unable to access API. Please check server configuration.');
+  }
+
+  // Server errors
+  if (error.message.includes('status 5')) {
+    throw new Error('Server error: Please try again later or contact support.');
+  }
+
+  // Client errors
+  if (error.message.includes('status 4')) {
+    throw error; // Don't modify 4xx errors, they're usually specific
+  }
+
+  throw error;
+}
+
+// Generic API request function with enhanced authentication and error handling
 async function apiRequest(endpoint, options = {}) {
   const user = auth.currentUser;
 
@@ -28,55 +57,74 @@ async function apiRequest(endpoint, options = {}) {
     console.warn("No authenticated user! Request will use default user_id on server.");
   }
 
+  // Prepare headers
   const headers = {
-    ...(options.headers || {}),
-    ...(user && { 'X-User-Id': user.uid })
+    ...(options.headers || {})
   };
+
+  // Add user ID if authenticated
+  if (user) {
+    headers['X-User-Id'] = user.uid;
+  }
 
   // Don't set Content-Type for FormData requests as it will be set automatically with boundary
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
+  // Add Accept header
+  headers['Accept'] = 'application/json';
+
   // Log headers for debugging
-  if (process.env.NODE_ENV === 'development') {
-    logHeaders(headers);
-  }
+  logHeaders(headers);
 
   const config = {
+    method: 'GET',
     ...options,
     headers,
-    // Important: Ensure CORS requests are made from browser
+    // CORS configuration
     mode: 'cors',
-    credentials: options.credentials || 'include'
+    credentials: 'include',
+    // Add cache control for development
+    ...(process.env.NODE_ENV === 'development' && {
+      cache: 'no-cache'
+    })
   };
 
   try {
     const fullUrl = `${API_BASE_URL}${endpoint}`;
-    console.log(`Sending request to ${fullUrl}`);
+    console.log(`Sending ${config.method} request to ${fullUrl}`);
 
     const response = await fetch(fullUrl, config);
     console.log(`Response status: ${response.status} ${response.statusText}`);
 
+    // Log response headers for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.log("Response Headers:");
+      for (const [key, value] of response.headers.entries()) {
+        console.log(`  ${key}: ${value}`);
+      }
+    }
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (jsonError) {
+        console.warn('Failed to parse error response as JSON:', jsonError);
+        errorData = { detail: `HTTP ${response.status}: ${response.statusText}` };
+      }
+
       throw new Error(
         errorData?.detail ||
+        errorData?.message ||
         `API request failed with status ${response.status}: ${response.statusText}`
       );
     }
 
     return await response.json();
   } catch (error) {
-    console.error(`API request to ${endpoint} failed:`, error);
-
-    // Enhanced error handling for common issues
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      console.error('Network error - check if API server is running and accessible');
-      throw new Error('Unable to connect to API server. Please check your connection and try again.');
-    }
-
-    throw error;
+    handleApiError(error, endpoint);
   }
 }
 
@@ -90,14 +138,17 @@ async function apiRequestWithRetry(endpoint, options = {}, maxRetries = 3) {
     } catch (error) {
       lastError = error;
 
-      // Don't retry on client errors (4xx)
-      if (error.message.includes('status 4')) {
+      // Don't retry on client errors (4xx) or CORS errors
+      if (error.message.includes('status 4') ||
+          error.message.includes('CORS') ||
+          error.message.includes('Cross-Origin')) {
         throw error;
       }
 
       if (attempt < maxRetries) {
-        console.log(`Request failed, retrying (${attempt}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        const delay = 1000 * Math.pow(2, attempt - 1); // Exponential backoff
+        console.log(`Request failed, retrying in ${delay}ms (${attempt}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
@@ -105,7 +156,7 @@ async function apiRequestWithRetry(endpoint, options = {}, maxRetries = 3) {
   throw lastError;
 }
 
-// Rest of your API functions remain the same...
+// Enhanced resume API with better error handling
 export const resumeApi = {
   generateResume(jobId, settings, customize = true, template = "standard") {
     const apiKey = settings?.openaiApiKey || "";
@@ -139,7 +190,7 @@ export const resumeApi = {
     return apiRequest(`/api/resume/${resumeId}/status`);
   },
 
-  async pollResumeStatus(resumeId, maxAttempts = 10, interval = 3000) {
+  async pollResumeStatus(resumeId, maxAttempts = 20, interval = 3000) {
     let attempts = 0;
     let lastStatus = null;
 
@@ -147,7 +198,7 @@ export const resumeApi = {
       const checkStatus = async () => {
         try {
           if (attempts >= maxAttempts) {
-            reject(new Error('Resume generation polling timed out'));
+            reject(new Error('Resume generation polling timed out after 60 seconds'));
             return;
           }
 
@@ -164,14 +215,30 @@ export const resumeApi = {
             return;
           }
 
-          if (statusData.status === 'error') {
-            reject(new Error(statusData.message || 'Resume generation failed'));
+          if (statusData.status === 'error' || statusData.status === 'failed') {
+            reject(new Error(statusData.message || statusData.error || 'Resume generation failed'));
             return;
           }
 
-          setTimeout(checkStatus, interval);
+          // Continue polling for in-progress statuses
+          if (statusData.status === 'processing' || statusData.status === 'queued' || statusData.status === 'pending') {
+            setTimeout(checkStatus, interval);
+          } else {
+            // Unknown status, continue polling but log warning
+            console.warn(`Unknown resume status: ${statusData.status}, continuing to poll...`);
+            setTimeout(checkStatus, interval);
+          }
         } catch (error) {
-          reject(error);
+          console.error(`Error checking resume status (attempt ${attempts}):`, error);
+
+          // If we've made several attempts and keep failing, give up
+          if (attempts >= 5) {
+            reject(error);
+            return;
+          }
+
+          // Otherwise, retry after a longer delay
+          setTimeout(checkStatus, interval * 2);
         }
       };
 
@@ -204,28 +271,10 @@ export const resumeApi = {
       const formData = new FormData();
       formData.append('yaml_content', yamlContent);
 
-      const user = auth.currentUser;
-      const headers = {
-        ...(user && { 'X-User-Id': user.uid })
-      };
-
-      const response = await fetch(`${API_BASE_URL}/api/resume/${resumeId}/update-yaml`, {
+      return await apiRequest(`/api/resume/${resumeId}/update-yaml`, {
         method: 'POST',
-        headers,
-        body: formData,
-        mode: 'cors',
-        credentials: 'include'
+        body: formData
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(
-          errorData?.detail ||
-          `API request failed with status ${response.status}: ${response.statusText}`
-        );
-      }
-
-      return await response.json();
     } catch (error) {
       console.error(`Error saving resume YAML:`, error);
       throw error;
@@ -243,20 +292,17 @@ export const jobsApi = {
     const queryParams = new URLSearchParams();
 
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
+      if (value !== undefined && value !== null && value !== '') {
         queryParams.append(key, value);
       }
     });
 
-    return apiRequest(`/api/jobs?${queryParams.toString()}`);
+    const queryString = queryParams.toString();
+    return apiRequest(`/api/jobs${queryString ? '?' + queryString : ''}`);
   },
 
   getJob: (jobId) => {
     return apiRequest(`/api/jobs/${jobId}`);
-  },
-
-  saveResumeYaml: (resumeId, yamlContent) => {
-    return resumeApi.saveResumeYaml(resumeId, yamlContent);
   },
 
   updateJobStatus: (jobId, status) => {
@@ -320,17 +366,78 @@ export const simplifyApi = {
   }
 };
 
-// Health check function
+// Enhanced health check function
 export const healthCheck = async () => {
   try {
+    console.log('Performing health check...');
     const response = await fetch(`${API_BASE_URL}/api/status`, {
       method: 'GET',
       mode: 'cors',
-      credentials: 'include'
+      credentials: 'include',
+      headers: {
+        'Accept': 'application/json'
+      }
     });
-    return response.ok;
+
+    const isHealthy = response.ok;
+    console.log(`Health check result: ${isHealthy ? 'HEALTHY' : 'UNHEALTHY'} (${response.status})`);
+
+    if (isHealthy) {
+      try {
+        const data = await response.json();
+        console.log('API Status:', data.status);
+      } catch (e) {
+        console.warn('Could not parse health check response as JSON');
+      }
+    }
+
+    return isHealthy;
   } catch (error) {
-    console.warn('Health check failed:', error);
+    console.warn('Health check failed:', error.message);
     return false;
+  }
+};
+
+// Utility to test CORS configuration
+export const testCORS = async () => {
+  try {
+    console.log('Testing CORS configuration...');
+
+    // Test OPTIONS request
+    const optionsResponse = await fetch(`${API_BASE_URL}/api/status`, {
+      method: 'OPTIONS',
+      mode: 'cors',
+      credentials: 'include',
+      headers: {
+        'Origin': window.location.origin,
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'Content-Type, X-User-Id'
+      }
+    });
+
+    console.log('OPTIONS response status:', optionsResponse.status);
+    console.log('OPTIONS response headers:');
+    for (const [key, value] of optionsResponse.headers.entries()) {
+      if (key.toLowerCase().includes('access-control')) {
+        console.log(`  ${key}: ${value}`);
+      }
+    }
+
+    // Test actual GET request
+    const getResponse = await healthCheck();
+
+    return {
+      optionsOk: optionsResponse.ok,
+      getOk: getResponse,
+      corsConfigured: optionsResponse.headers.get('access-control-allow-origin') !== null
+    };
+  } catch (error) {
+    console.error('CORS test failed:', error);
+    return {
+      optionsOk: false,
+      getOk: false,
+      corsConfigured: false,
+      error: error.message
+    };
   }
 };
