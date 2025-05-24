@@ -296,89 +296,98 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
               <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300 mb-3">
                 <a
                   href={`javascript:(function(){
-                    console.log('🔍 JobTrak Token Capture Starting...');
-                    
-                    // Get cookies
-                    var cookies = document.cookie.split(';').reduce((acc, cookie) => {
-                      var [key, value] = cookie.trim().split('=');
-                      if (key && value) acc[key] = decodeURIComponent(value);
-                      return acc;
-                    }, {});
-                    
-                    var csrf = cookies.csrf;
-                    var auth = null;
-                    
-                    // Try multiple sources for auth token
-                    try {
-                      // Method 1: localStorage featurebaseGlobalAuth
-                      var fb = localStorage.getItem('featurebaseGlobalAuth');
-                      if (fb) {
-                        var parsed = JSON.parse(fb);
-                        auth = parsed.jwt;
-                        console.log('✅ Found auth in featurebaseGlobalAuth');
-                      }
-                    } catch(e) {
-                      console.log('❌ No featurebaseGlobalAuth found');
-                    }
-                    
-                    // Method 2: Check for authorization cookie
-                    if (!auth && cookies.authorization) {
-                      auth = cookies.authorization;
-                      console.log('✅ Found auth in cookies');
-                    }
-                    
-                    // Method 3: Check sessionStorage
-                    if (!auth) {
-                      try {
-                        var keys = Object.keys(sessionStorage);
-                        for (var i = 0; i < keys.length; i++) {
-                          var item = sessionStorage.getItem(keys[i]);
-                          if (item && item.includes('jwt') || item.includes('token')) {
-                            console.log('🔍 Found potential token in sessionStorage:', keys[i]);
-                          }
-                        }
-                      } catch(e) {}
-                    }
-                    
-                    console.log('🔍 Token Status - CSRF:', !!csrf, 'Auth:', !!auth);
-                    console.log('🍪 Available cookies:', Object.keys(cookies));
-                    
-                    if (!auth || !csrf) {
-                      alert('❌ Tokens not found!\\n\\nCSRF: ' + (csrf ? '✅' : '❌') + '\\nAuth: ' + (auth ? '✅' : '❌') + '\\n\\nMake sure you\\'re logged into Simplify Jobs and try again.');
-                      return;
-                    }
-                    
-                    console.log('📤 Sending tokens to JobTrak...');
-                    console.log('👤 Using User ID: ${currentUser?.uid}');
-                    
-                    fetch('${process.env.REACT_APP_API_BASE_URL || 'https://jobtrackai.duckdns.org'}/api/simplify/auto-capture', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'X-User-Id': '${currentUser?.uid}'
-                      },
-                      credentials: 'include',
-                      body: JSON.stringify({
-                        cookies: document.cookie,
-                        csrf: csrf,
-                        authorization: auth,
-                        url: location.href,
-                        timestamp: new Date().toISOString()
-                      })
-                    })
-                    .then(response => {
-                      console.log('📡 Response status:', response.status);
-                      return response.ok ? response.json() : response.text().then(text => Promise.reject(text));
-                    })
-                    .then(result => {
-                      console.log('✅ Success:', result);
-                      alert('✅ Tokens captured successfully!\\n\\nGo back to JobTrak and refresh the modal.');
-                    })
-                    .catch(error => {
-                      console.error('❌ Error:', error);
-                      alert('❌ Failed to capture tokens:\\n\\n' + error);
-                    });
-                  })();`}
+try {
+  console.log('🔍 JobTrak Token Capture Starting...');
+  
+  var apiUrl = '${process.env.REACT_APP_API_BASE_URL || 'https://jobtrackai.duckdns.org'}';
+  var userId = '${currentUser?.uid}';
+  
+  if (!userId) {
+    alert('❌ Error: No user ID found. Please make sure you are logged into JobTrak.');
+    return;
+  }
+  
+  console.log('👤 Using User ID:', userId);
+  console.log('🌐 API URL:', apiUrl);
+  
+  var cookies = {};
+  document.cookie.split(';').forEach(function(cookie) {
+    var parts = cookie.trim().split('=');
+    if (parts[0] && parts[1]) {
+      cookies[parts[0]] = decodeURIComponent(parts[1]);
+    }
+  });
+  
+  var csrf = cookies.csrf;
+  var auth = null;
+  
+  try {
+    var fb = localStorage.getItem('featurebaseGlobalAuth');
+    if (fb) {
+      var parsed = JSON.parse(fb);
+      auth = parsed.jwt;
+      console.log('✅ Found auth in featurebaseGlobalAuth');
+    }
+  } catch(e) {
+    console.log('❌ No featurebaseGlobalAuth found:', e.message);
+  }
+  
+  if (!auth && cookies.authorization) {
+    auth = cookies.authorization;
+    console.log('✅ Found auth in cookies');
+  }
+  
+  console.log('🔍 Token Status - CSRF:', !!csrf, 'Auth:', !!auth);
+  console.log('🍪 Available cookies:', Object.keys(cookies));
+  
+  if (!auth || !csrf) {
+    alert('❌ Tokens not found!\\n\\nCSRF: ' + (csrf ? '✅' : '❌') + '\\nAuth: ' + (auth ? '✅' : '❌') + '\\n\\nMake sure you are logged into Simplify Jobs and try again.');
+    return;
+  }
+  
+  console.log('📤 Sending tokens to JobTrak...');
+  
+  var payload = {
+    cookies: document.cookie,
+    csrf: csrf,
+    authorization: auth,
+    url: location.href,
+    timestamp: new Date().toISOString()
+  };
+  
+  fetch(apiUrl + '/api/simplify/auto-capture', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': userId
+    },
+    credentials: 'include',
+    body: JSON.stringify(payload)
+  })
+  .then(function(response) {
+    console.log('📡 Response status:', response.status);
+    if (response.ok) {
+      return response.json();
+    } else {
+      return response.text().then(function(text) {
+        throw new Error('HTTP ' + response.status + ': ' + text);
+      });
+    }
+  })
+  .then(function(result) {
+    console.log('✅ Success:', result);
+    alert('✅ Tokens captured successfully!\\n\\nGo back to JobTrak and refresh the modal.');
+  })
+  .catch(function(error) {
+    console.error('❌ Error:', error);
+    alert('❌ Failed to capture tokens:\\n\\n' + error.message);
+  });
+  
+} catch(error) {
+  console.error('❌ Bookmarklet Error:', error);
+  alert('❌ Bookmarklet Error:\\n\\n' + error.message + '\\n\\nCheck browser console for details.');
+}
+})();`}
                   className="inline-block px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium cursor-move select-all"
                   draggable="true"
                   onClick={(e) => e.preventDefault()}
