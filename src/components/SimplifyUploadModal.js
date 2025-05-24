@@ -402,31 +402,83 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
               <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300 mb-3">
                 <a
                   href={`javascript:(function(){
-                    const c=document.cookie;
-                    const csrf=document.querySelector('meta[name="csrf-token"]')?.content||
-                              document.querySelector('[name="csrf-token"]')?.value||
-                              localStorage.getItem('csrf')||
-                              sessionStorage.getItem('csrf')||
-                              c.match(/csrf=([^;]+)/)?.[1];
-                    const auth=localStorage.getItem('authorization')||
-                               sessionStorage.getItem('authorization')||
-                               c.match(/authorization=([^;]+)/)?.[1];
-                    if(!auth||!csrf){
-                      alert('❌ Could not find tokens. Make sure you are logged into Simplify Jobs.');
+                    console.log('JobTrak: Starting token capture...');
+
+                    // Get all cookies as object
+                    const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+                      const [key, value] = cookie.trim().split('=');
+                      if (key && value) acc[key] = decodeURIComponent(value);
+                      return acc;
+                    }, {});
+
+                    console.log('JobTrak: Found cookies:', Object.keys(cookies));
+
+                    // Extract tokens with multiple fallback methods
+                    const auth = cookies.authorization ||
+                                localStorage.getItem('authorization') ||
+                                sessionStorage.getItem('authorization') ||
+                                localStorage.getItem('auth_token') ||
+                                sessionStorage.getItem('auth_token');
+
+                    const csrf = cookies.csrf ||
+                                cookies['csrf-token'] ||
+                                cookies._token ||
+                                localStorage.getItem('csrf') ||
+                                sessionStorage.getItem('csrf') ||
+                                document.querySelector('meta[name="csrf-token"]')?.content ||
+                                document.querySelector('input[name="_token"]')?.value;
+
+                    console.log('JobTrak: Auth token found:', !!auth);
+                    console.log('JobTrak: CSRF token found:', !!csrf);
+
+                    if (!auth) {
+                      alert('❌ Authorization token not found. Make sure you are logged into Simplify Jobs.');
+                      console.log('JobTrak: Available cookies:', Object.keys(cookies));
                       return;
                     }
-                    fetch('${process.env.REACT_APP_API_BASE_URL || window.location.origin}/api/simplify/auto-capture',{
-                      method:'POST',
-                      headers:{'Content-Type':'application/json'},
-                      credentials:'include',
-                      body:JSON.stringify({
-                        cookies:c,
-                        csrf:csrf,
-                        authorization:auth,
-                        url:window.location.href,
-                        timestamp:new Date().toISOString()
+
+                    if (!csrf) {
+                      alert('❌ CSRF token not found. Make sure you are logged into Simplify Jobs.');
+                      console.log('JobTrak: Available cookies:', Object.keys(cookies));
+                      return;
+                    }
+
+                    // Send to JobTrak API
+                    const apiUrl = '${process.env.REACT_APP_API_BASE_URL || window.location.origin}/api/simplify/auto-capture';
+                    console.log('JobTrak: Sending to:', apiUrl);
+
+                    fetch(apiUrl, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Id': 'bookmarklet-user'
+                      },
+                      credentials: 'include',
+                      body: JSON.stringify({
+                        cookies: document.cookie,
+                        csrf: csrf,
+                        authorization: auth,
+                        url: window.location.href,
+                        timestamp: new Date().toISOString(),
+                        debug: {
+                          cookieKeys: Object.keys(cookies),
+                          domain: window.location.hostname
+                        }
                       })
-                    }).then(r=>r.ok?alert('✅ Tokens captured! Go back to JobTrak and refresh.'):alert('❌ Failed to capture tokens: '+r.statusText)).catch(e=>alert('❌ Error: '+e.message));
+                    }).then(response => {
+                      console.log('JobTrak: Response status:', response.status);
+                      if (response.ok) {
+                        alert('✅ Tokens captured successfully! Go back to JobTrak and refresh.');
+                      } else {
+                        response.text().then(text => {
+                          alert('❌ Failed to capture tokens: ' + text);
+                          console.log('JobTrak: Error response:', text);
+                        });
+                      }
+                    }).catch(error => {
+                      console.error('JobTrak: Fetch error:', error);
+                      alert('❌ Network error: ' + error.message);
+                    });
                   })();`}
                   className="inline-block px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium cursor-move select-all"
                   draggable="true"
@@ -439,10 +491,20 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
                 <p><strong>Instructions:</strong></p>
                 <ol className="list-decimal ml-4 space-y-1">
                   <li>Drag the purple button above to your bookmarks bar</li>
-                  <li>Login to Simplify Jobs in another tab</li>
-                  <li>Click the bookmark while on Simplify.jobs</li>
-                  <li>Come back here and refresh session status</li>
+                  <li>Make sure you're logged into Simplify Jobs</li>
+                  <li>Click the bookmark while on simplify.jobs</li>
+                  <li>Check browser console (F12) for debug info if it fails</li>
+                  <li>Come back here and click "Check if Tokens Captured"</li>
                 </ol>
+              </div>
+
+              {/* Debug helper */}
+              <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                <p className="font-medium text-yellow-800">Debug Helper:</p>
+                <p className="text-yellow-700">If the bookmarklet fails, open browser console (F12) on Simplify.jobs and run:</p>
+                <code className="block mt-1 p-1 bg-white rounded text-xs">
+                  console.log('Cookies:', document.cookie.split(';').map(c => c.trim().split('=')[0]));
+                </code>
               </div>
             </div>
 
@@ -473,6 +535,34 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
               >
                 Check if Tokens Captured
               </button>
+            </div>
+
+            {/* Manual token input for debugging */}
+            <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded">
+              <p className="text-sm font-medium text-gray-700 mb-2">Quick Manual Capture (Debug):</p>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Paste authorization cookie value here"
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                  value={sessionData.authorization}
+                  onChange={(e) => handleInputChange('authorization', e.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Paste csrf cookie value here"
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                  value={sessionData.csrf}
+                  onChange={(e) => handleInputChange('csrf', e.target.value)}
+                />
+                <button
+                  onClick={saveSession}
+                  disabled={!sessionData.authorization || !sessionData.csrf}
+                  className="w-full py-1 px-2 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Quick Save Tokens
+                </button>
+              </div>
             </div>
           </div>
         )}
