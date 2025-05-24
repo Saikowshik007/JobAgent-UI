@@ -150,12 +150,36 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     }
   }, [isOpen, resumeId]);
 
+  // Listen for CSRF token from bookmarklet
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // Only accept messages from simplify.jobs
+      if (event.origin !== 'https://simplify.jobs') {
+        return;
+      }
+
+      if (event.data && event.data.type === 'CSRF_TOKEN_CAPTURED') {
+        console.log('✅ Received CSRF token via postMessage:', event.data.token?.substring(0, 20) + '...');
+        
+        // Store the token locally for this session
+        setCsrfToken(event.data.token);
+        localStorage.setItem('jobtrak_simplify_csrf', event.data.token);
+        localStorage.setItem('jobtrak_simplify_csrf_captured_at', new Date().toISOString());
+        
+        setStatus('ready');
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   const checkTokensAndLoadData = async () => {
     try {
       console.log('🔍 Checking for stored CSRF token and loading resume data...');
 
-      // Check for stored CSRF token
-      const storedToken = localStorage.getItem('simplify_csrf_token');
+      // Check for stored CSRF token in our domain's localStorage
+      const storedToken = localStorage.getItem('jobtrak_simplify_csrf');
       
       // Load resume data if we haven't already
       if (!resumeData && resumeId) {
@@ -163,11 +187,11 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
       }
 
       if (storedToken) {
-        console.log('✅ CSRF token found! Ready to upload.');
+        console.log('✅ CSRF token found in JobTrak localStorage! Ready to upload.');
         setCsrfToken(storedToken);
         setStatus('ready');
       } else {
-        console.log('❌ No CSRF token found. Need to capture from Simplify.');
+        console.log('❌ No CSRF token found in JobTrak localStorage. Need to capture from Simplify.');
         setStatus('need-tokens');
       }
     } catch (err) {
@@ -308,6 +332,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
           <p>Resume: {resumeData ? '✅ Loaded' : '❌ Not loaded'}</p>
           <p>CSRF Token: {csrfToken ? '✅ Ready' : '❌ Missing'}</p>
           <p>Status: {status}</p>
+          <p>Token Source: {localStorage.getItem('jobtrak_simplify_csrf') ? 'JobTrak localStorage' : 'Not stored'}</p>
         </div>
 
         {/* Checking Status */}
@@ -334,7 +359,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
 
               <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300 mb-3">
                 <a
-                  href="javascript:(function(){try{console.log('🔍 JobTrak CSRF Token Capture...');var cookies={};document.cookie.split(';').forEach(function(cookie){var parts=cookie.trim().split('=');if(parts[0]&&parts[1]){cookies[parts[0]]=decodeURIComponent(parts[1]);}});var csrf=cookies.csrf;console.log('🔍 CSRF Token Status:',!!csrf);console.log('🍪 Available cookies:',Object.keys(cookies));if(csrf){localStorage.setItem('simplify_csrf_token',csrf);localStorage.setItem('simplify_csrf_captured_at',new Date().toISOString());console.log('✅ CSRF token stored in localStorage');alert('✅ CSRF token captured successfully!\\n\\nGo back to JobTrak and refresh the modal.\\n\\nNote: Authorization cookie will be sent automatically by your browser.');}else{console.log('❌ CSRF token not found');alert('❌ CSRF token not found!\\n\\nMake sure you are logged into Simplify Jobs and try again.');}}catch(error){console.error('❌ Bookmarklet Error:',error);alert('❌ Bookmarklet Error:\\n\\n'+error.message+'\\n\\nCheck browser console for details.');}})()"
+                  href="javascript:(function(){try{console.log('🔍 JobTrak CSRF Token Capture...');var cookies={};document.cookie.split(';').forEach(function(cookie){var parts=cookie.trim().split('=');if(parts[0]&&parts[1]){cookies[parts[0]]=decodeURIComponent(parts[1]);}});var csrf=cookies.csrf;console.log('🔍 CSRF Token Status:',!!csrf);if(csrf){console.log('✅ CSRF token found, sending to JobTrak...');var sent=false;if(window.opener){try{window.opener.postMessage({type:'CSRF_TOKEN_CAPTURED',token:csrf,source:'simplify_bookmarklet'},'*');console.log('✅ Sent CSRF token via window.opener');sent=true;}catch(e){console.log('Failed to send via opener:',e);}}var allWindows=[];try{for(var i=0;i<20;i++){var w=window.open('','_blank'+i);if(w&&w!==window){allWindows.push(w);w.postMessage({type:'CSRF_TOKEN_CAPTURED',token:csrf,source:'simplify_bookmarklet'},'*');}}}catch(e){console.log('Window iteration failed:',e);}if(window.parent&&window.parent!==window){try{window.parent.postMessage({type:'CSRF_TOKEN_CAPTURED',token:csrf,source:'simplify_bookmarklet'},'*');console.log('✅ Sent CSRF token via window.parent');sent=true;}catch(e){console.log('Failed to send via parent:',e);}}setTimeout(function(){allWindows.forEach(function(w){try{w.close();}catch(e){}});},100);localStorage.setItem('simplify_csrf_backup',csrf);alert('✅ CSRF token captured!\\n\\nToken sent to JobTrak window.\\nIf JobTrak doesn\\'t update automatically, go back and refresh the modal.');}else{alert('❌ CSRF token not found!\\n\\nMake sure you are logged into Simplify Jobs.');}}catch(error){console.error('❌ Bookmarklet Error:',error);alert('❌ Error: '+error.message);}})()"
                   className="inline-block px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium cursor-move select-all"
                   draggable="true"
                   onClick={(e) => e.preventDefault()}
@@ -348,12 +373,12 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
                 <ol className="list-decimal ml-4 space-y-1">
                   <li>Drag the purple button above to your bookmarks bar</li>
                   <li>Go to <a href="https://simplify.jobs" target="_blank" rel="noopener noreferrer" className="underline">simplify.jobs</a> and make sure you're logged in</li>
-                  <li>Click the bookmark you just created</li>
-                  <li>Check the alert message - it should say "CSRF token captured successfully"</li>
-                  <li>Come back here and click "Check Again"</li>
+                  <li>Click the bookmark - it will automatically send the CSRF token to this JobTrak window</li>
+                  <li>This modal should automatically update to "Ready to Upload"</li>
+                  <li>If it doesn't update, click "Check Again" below</li>
                 </ol>
                 <p className="text-purple-500 font-medium">
-                  💡 The authorization cookie is HttpOnly and will be sent automatically by your browser - no backend needed!
+                  💡 The CSRF token is sent securely via cross-window messaging. The HttpOnly authorization cookie stays safe in your browser!
                 </p>
               </div>
             </div>
