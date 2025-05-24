@@ -345,36 +345,77 @@ export const jobsApi = {
 
 // Simplify API
 export const simplifyApi = {
-  storeSession: (sessionData) => {
-    return apiRequest('/api/simplify/store-session', {
-      method: 'POST',
-      body: JSON.stringify(sessionData)
+  // Check if user has captured CSRF token
+  async checkSession() {
+    const response = await fetch(`${API_BASE_URL}/api/simplify/check-session`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': getCurrentUserId()
+      },
+      credentials: 'include'
     });
+
+    if (!response.ok) {
+      throw new Error(`Failed to check session: ${response.statusText}`);
+    }
+
+    return response.json();
   },
 
-  uploadResume: (resumeId, jobId = null) => {
-    return apiRequest('/api/simplify/upload-resume', {
-      method: 'POST',
-      body: JSON.stringify({
-        resume_id: resumeId,
-        job_id: jobId
-      })
-    });
-  },
+  // Get upload configuration for frontend upload
+  async getUploadConfig(resumeId, jobId = null) {
+    const formData = new FormData();
+    formData.append('resume_id', resumeId);
+    if (jobId) formData.append('job_id', jobId);
 
-  // NEW: Upload resume with PDF data generated in UI
-  uploadResumeWithPdf: (formData) => {
-    return apiRequest('/api/simplify/upload-resume-pdf', {
+    const response = await fetch(`${API_BASE_URL}/api/simplify/get-upload-config`, {
       method: 'POST',
+      headers: {
+        'X-User-Id': getCurrentUserId()
+      },
+      credentials: 'include',
       body: formData
-      // Note: Don't set Content-Type header - let browser set it with boundary for multipart/form-data
     });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get upload config: ${response.statusText}`);
+    }
+
+    return response.json();
   },
 
-  checkSession: () => {
-    return apiRequest('/api/simplify/check-session');
+  // Upload PDF directly to Simplify (frontend handles this)
+  async uploadPdfToSimplify(pdfBlob, uploadConfig, filename = 'resume.pdf') {
+    const formData = new FormData();
+    formData.append('file', pdfBlob, filename);
+
+    const response = await fetch(uploadConfig.upload_url, {
+      method: 'POST',
+      headers: uploadConfig.headers,
+      credentials: 'include', // This ensures HttpOnly cookies are sent
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Simplify upload failed: ${response.status} - ${errorText}`);
+    }
+
+    try {
+      return await response.json();
+    } catch {
+      return { message: 'Upload successful', status: response.status };
+    }
   }
 };
+
+// Helper function to get current user ID
+function getCurrentUserId() {
+  // This should match how you get the current user ID in your app
+  // For example, from Firebase Auth or your auth context
+  return window.currentUser?.uid || 'default_user';
+}
 
 // Enhanced health check function without credentials
 export const healthCheck = async () => {
