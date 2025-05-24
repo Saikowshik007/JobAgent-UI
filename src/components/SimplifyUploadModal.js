@@ -1,4 +1,4 @@
-// SimplifyUploadModal.js - Simplified bookmarklet-only version
+// SimplifyUploadModal.js - Direct upload to Simplify API
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -210,30 +210,63 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     }
   };
 
-  const uploadResume = async () => {
+  const uploadResumeDirectly = async () => {
     setStatus('uploading');
     setError('');
 
     try {
-      console.log('🚀 Starting upload process...');
+      console.log('🚀 Starting direct upload to Simplify...');
 
       // Generate PDF
       const pdfBlob = await generatePdfBlob();
 
-      // Upload to Simplify
+      // Get tokens from backend
+      const tokenData = await simplifyApi.getStoredTokens();
+      if (!tokenData.authorization || !tokenData.csrf) {
+        throw new Error('Missing authentication tokens. Please capture tokens first.');
+      }
+
+      console.log('🔑 Got tokens, uploading directly to Simplify API...');
+
+      // Create form data for multipart upload
       const formData = new FormData();
-      formData.append('resume_pdf', pdfBlob, `resume_${resumeId}.pdf`);
-      formData.append('resume_id', resumeId);
-      formData.append('job_id', jobId);
+      const fileName = `${resumeData?.basic?.name?.replace(/\s+/g, '_') || 'resume'}_resume.pdf`;
+      formData.append('file', pdfBlob, fileName);
 
-      const result = await simplifyApi.uploadResumeWithPdf(formData);
+      // Upload directly to Simplify API
+      const response = await fetch('https://api.simplify.jobs/v2/candidate/me/resume/upload', {
+        method: 'POST',
+        headers: {
+          'accept': '*/*',
+          'accept-language': 'en-US,en;q=0.9',
+          'origin': 'https://simplify.jobs',
+          'referer': 'https://simplify.jobs/',
+          'sec-ch-ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"macOS"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-site',
+          'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+          'x-csrf-token': tokenData.csrf,
+        },
+        body: formData,
+        credentials: 'include'
+      });
 
-      console.log('✅ Upload successful:', result);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Direct upload successful:', result);
+
       setStatus('success');
       onUploadComplete?.(result);
 
     } catch (err) {
-      console.error('❌ Upload failed:', err);
+      console.error('❌ Direct upload failed:', err);
       setError(`Upload failed: ${err.message}`);
       setStatus('error');
     }
@@ -431,7 +464,7 @@ try {
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <h4 className="font-medium text-green-800 mb-2">✅ Ready to Upload</h4>
               <p className="text-sm text-green-700">
-                Authentication confirmed! Your resume will be generated as a PDF and uploaded to Simplify.
+                Authentication confirmed! Your resume will be generated as a PDF and uploaded directly to Simplify.
               </p>
             </div>
 
@@ -440,10 +473,11 @@ try {
               <p className="text-sm text-gray-600">Resume: {resumeData?.basic?.name || 'Unnamed'}</p>
               <p className="text-sm text-gray-600">Job ID: {jobId}</p>
               <p className="text-sm text-gray-600">Session: {sessionStatus?.session_age_hours?.toFixed(1)}h old</p>
+              <p className="text-sm text-gray-600">Upload Method: Direct to Simplify API</p>
             </div>
 
             <button
-              onClick={uploadResume}
+              onClick={uploadResumeDirectly}
               disabled={!resumeData}
               className="w-full py-3 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
             >
@@ -464,7 +498,7 @@ try {
           <div className="text-center py-8">
             <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
             <p className="text-gray-600 mb-2">
-              {generatingPdf ? 'Generating PDF...' : 'Uploading to Simplify...'}
+              {generatingPdf ? 'Generating PDF...' : 'Uploading directly to Simplify...'}
             </p>
             <p className="text-xs text-gray-500">This may take a few moments</p>
           </div>
@@ -479,7 +513,7 @@ try {
               </svg>
             </div>
             <h4 className="text-lg font-medium text-gray-900 mb-2">Upload Successful! 🎉</h4>
-            <p className="text-gray-600">Your resume has been uploaded to Simplify Jobs.</p>
+            <p className="text-gray-600">Your resume has been uploaded directly to Simplify Jobs.</p>
           </div>
         )}
 
