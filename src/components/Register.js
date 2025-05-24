@@ -83,6 +83,38 @@ function Register() {
     }
   };
 
+  // Function to download sample resume file
+  const downloadSampleFile = () => {
+    try {
+      // Fetch the sample file from the public folder
+      fetch('/sample-resume.yaml')
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Sample file not found');
+          }
+          return response.blob();
+        })
+        .then(blob => {
+          // Create download link
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'sample-resume.yaml';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+        })
+        .catch(error => {
+          console.error('Error downloading sample file:', error);
+          setError('Failed to download sample file. Please try again.');
+        });
+    } catch (error) {
+      console.error('Error downloading sample file:', error);
+      setError('Failed to download sample file. Please try again.');
+    }
+  };
+
   const handleResumeUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -546,9 +578,21 @@ function Register() {
               {entryMethod === "upload" ? (
                 /* File Upload Option */
                 <div>
-                  <p className="text-sm text-gray-500 mb-4">
-                    Upload your resume.yaml file to automatically fill your profile
-                  </p>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm text-gray-500">
+                      Upload your resume.yaml file to automatically fill your profile
+                    </p>
+                    <button
+                      type="button"
+                      onClick={downloadSampleFile}
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Sample File
+                    </button>
+                  </div>
                   <input
                     id="resume-upload"
                     name="resume-upload"
@@ -567,6 +611,11 @@ function Register() {
                       Resume successfully loaded: {resumeFile?.name}
                     </p>
                   )}
+                  <div className="mt-3 p-3 bg-blue-50 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      <strong>Need help getting started?</strong> Download our sample file to see the expected format, then customize it with your own information.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 /* Manual Entry Option - Abbreviated for space */
