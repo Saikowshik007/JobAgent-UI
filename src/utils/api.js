@@ -344,9 +344,21 @@ export const jobsApi = {
 };
 
 // Enhanced Simplify API with hybrid authentication approach
+// Enhanced Simplify API with simplified token management
 export const simplifyApi = {
   /**
-   * Store Simplify session data (legacy method)
+   * Store both CSRF and authorization tokens
+   */
+  storeTokens: (tokens) => {
+    console.log('🔑 Storing authentication tokens...');
+    return apiRequest('/api/simplify/store-tokens', {
+      method: 'POST',
+      body: JSON.stringify(tokens)
+    });
+  },
+
+  /**
+   * Store Simplify session data (legacy method - kept for backward compatibility)
    */
   storeSession: (sessionData) => {
     return apiRequest('/api/simplify/store-session', {
@@ -356,18 +368,7 @@ export const simplifyApi = {
   },
 
   /**
-   * Auto-capture CSRF token via bookmarklet
-   */
-  autoCaptureTokens: (tokenData) => {
-    console.log('🔍 Auto-capturing CSRF token...');
-    return apiRequest('/api/simplify/auto-capture', {
-      method: 'POST',
-      body: JSON.stringify(tokenData)
-    });
-  },
-
-  /**
-   * Store authorization token manually
+   * Store authorization token manually (legacy method)
    */
   storeAuthToken: (authToken) => {
     console.log('🔑 Storing authorization token...');

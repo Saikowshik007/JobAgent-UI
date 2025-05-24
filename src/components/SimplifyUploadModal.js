@@ -130,14 +130,15 @@ const ResumeDocument = ({ data }) => (
     </Page>
   </Document>
 );
+
 const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
   const [status, setStatus] = useState('checking'); // checking, need-auth, ready, uploading, success, error
   const [error, setError] = useState('');
   const [resumeData, setResumeData] = useState(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [sessionStatus, setSessionStatus] = useState(null);
+  const [csrfToken, setCsrfToken] = useState('');
   const [authToken, setAuthToken] = useState('');
-  const [showAuthInput, setShowAuthInput] = useState(false);
   const { currentUser } = useAuth();
 
   // Auto-check session and load resume data when modal opens
@@ -145,8 +146,8 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     if (isOpen) {
       setStatus('checking');
       setError('');
+      setCsrfToken('');
       setAuthToken('');
-      setShowAuthInput(false);
       checkSessionAndLoadData();
     }
   }, [isOpen, resumeId]);
@@ -211,110 +212,27 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     }
   };
 
-  // Enhanced bookmarklet that only captures CSRF
-  const csrfCaptureBookmarklet = `javascript:(function(){
-try {
-  console.log('🔍 JobTrak CSRF Capture Starting...');
-
-  var apiUrl = '${process.env.REACT_APP_API_BASE_URL || 'https://jobtrackai.duckdns.org'}';
-  var userId = '${simplifyApi.getCurrentUserId()}';
-
-  if (!userId || userId === 'default_user') {
-    alert('❌ Error: No user ID found. Please make sure you are logged into JobTrak.');
-    return;
-  }
-
-  // Check if we're on Simplify.jobs
-  if (!location.hostname.includes('simplify.jobs')) {
-    alert('❌ This bookmarklet must be run on simplify.jobs\\n\\nCurrent site: ' + location.hostname);
-    return;
-  }
-
-  console.log('👤 Using User ID:', userId);
-  console.log('🌐 API URL:', apiUrl);
-
-  // Get CSRF token from cookies
-  var cookies = {};
-  document.cookie.split(';').forEach(function(cookie) {
-    var parts = cookie.trim().split('=');
-    if (parts[0] && parts[1]) {
-      cookies[parts[0]] = decodeURIComponent(parts[1]);
-    }
-  });
-
-  var csrf = cookies.csrf;
-
-  console.log('🔍 CSRF Token Status:', !!csrf);
-  console.log('🍪 Available cookies:', Object.keys(cookies));
-
-  if (!csrf) {
-    alert('❌ CSRF token not found!\\n\\nMake sure you are logged into Simplify Jobs and try again.\\n\\nAvailable cookies: ' + Object.keys(cookies).join(', '));
-    return;
-  }
-
-  console.log('📤 Sending CSRF token to JobTrak...');
-
-  var payload = {
-    csrf: csrf,
-    cookies: document.cookie,
-    url: location.href,
-    timestamp: new Date().toISOString(),
-    capture_method: 'csrf_only'
-  };
-
-  fetch(apiUrl + '/api/simplify/auto-capture', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': userId
-    },
-    credentials: 'include',
-    body: JSON.stringify(payload)
-  })
-  .then(function(response) {
-    console.log('📡 Response status:', response.status);
-    if (response.ok) {
-      return response.json();
-    } else {
-      return response.text().then(function(text) {
-        throw new Error('HTTP ' + response.status + ': ' + text);
-      });
-    }
-  })
-  .then(function(result) {
-    console.log('✅ Success:', result);
-    alert('✅ CSRF token captured successfully!\\n\\nGo back to JobTrak and enter your authorization token.');
-  })
-  .catch(function(error) {
-    console.error('❌ Error:', error);
-    alert('❌ Failed to capture CSRF token:\\n\\n' + error.message);
-  });
-
-} catch(error) {
-  console.error('❌ Bookmarklet Error:', error);
-  alert('❌ Bookmarklet Error:\\n\\n' + error.message + '\\n\\nCheck browser console for details.');
-}
-})();`;
-
-  const handleAuthSubmit = async () => {
-    if (!authToken.trim()) {
-      setError('Please enter your authorization token');
+  const handleTokenSubmit = async () => {
+    if (!csrfToken.trim() || !authToken.trim()) {
+      setError('Please enter both CSRF token and authorization token');
       return;
     }
 
     try {
-      console.log('🔑 Submitting authorization token...');
+      console.log('🔑 Submitting tokens...');
 
-      // Use the API method instead of direct fetch
-      await simplifyApi.storeAuthToken(authToken.trim());
+      // Store both tokens via the API
+      await simplifyApi.storeTokens({
+        csrf: csrfToken.trim(),
+        authorization: authToken.trim()
+      });
 
-      console.log('✅ Authorization stored successfully');
+      console.log('✅ Tokens stored successfully');
       setStatus('ready');
-      setShowAuthInput(false);
 
     } catch (err) {
-      console.error('❌ Failed to store authorization:', err);
-      setError(`Failed to store authorization: ${err.message}`);
+      console.error('❌ Failed to store tokens:', err);
+      setError(`Failed to store tokens: ${err.message}`);
     }
   };
 
@@ -391,68 +309,71 @@ try {
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <h4 className="font-medium text-yellow-800 mb-2">🔐 Authentication Required</h4>
               <p className="text-sm text-yellow-700">
-                Two-step authentication process: First capture CSRF token, then provide authorization token.
+                Please provide your Simplify.jobs authentication tokens to upload your resume.
               </p>
             </div>
 
-            {/* Step 1: CSRF Capture */}
+            {/* Token Input Instructions */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-4">
-              <h5 className="font-medium text-blue-800 mb-3">Step 1: Capture CSRF Token</h5>
+              <h5 className="font-medium text-blue-800 mb-3">How to Get Your Tokens</h5>
 
-              <div className="bg-white p-3 rounded border-2 border-dashed border-blue-300 mb-3">
-                <a
-                  href={csrfCaptureBookmarklet}
-                  className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium cursor-move select-all"
-                  draggable="true"
-                  onClick={(e) => e.preventDefault()}
-                >
-                  📌 Capture CSRF Token
-                </a>
-              </div>
-
-              <div className="text-xs text-blue-600 space-y-1">
-                <p><strong>Instructions:</strong></p>
-                <ol className="list-decimal ml-4 space-y-1">
-                  <li>Drag the blue button above to your bookmarks bar</li>
-                  <li>Go to <a href="https://simplify.jobs" target="_blank" rel="noopener noreferrer" className="underline">simplify.jobs</a> and make sure you're logged in</li>
-                  <li>Click the bookmark you just created</li>
-                  <li>Wait for success message, then continue to Step 2</li>
-                </ol>
-              </div>
-            </div>
-
-            {/* Step 2: Authorization Token Input */}
-            <div className="bg-gradient-to-r from-green-50 to-teal-50 border-2 border-green-200 rounded-lg p-4">
-              <h5 className="font-medium text-green-800 mb-3">Step 2: Enter Authorization Token</h5>
-
-              <div className="space-y-3">
-                <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
-                  <p><strong>How to find your authorization token:</strong></p>
+              <div className="text-xs text-blue-600 space-y-2">
+                <div className="bg-white p-3 rounded border border-blue-200">
+                  <p><strong>Step 1: Open Simplify.jobs</strong></p>
                   <ol className="list-decimal ml-4 mt-1 space-y-1">
-                    <li>On simplify.jobs, open Developer Tools (F12)</li>
-                    <li>Go to Application tab → Cookies → https://simplify.jobs</li>
-                    <li>Find the "authorization" cookie and copy its value</li>
-                    <li>Paste it below</li>
+                    <li>Go to <a href="https://simplify.jobs" target="_blank" rel="noopener noreferrer" className="underline">simplify.jobs</a> and make sure you're logged in</li>
+                    <li>Open Developer Tools (F12 or right-click → Inspect)</li>
+                    <li>Go to the <strong>Application</strong> tab</li>
+                    <li>In the left sidebar, expand <strong>Cookies</strong> → <strong>https://simplify.jobs</strong></li>
                   </ol>
                 </div>
 
-                <div className="space-y-2">
-                  <textarea
-                    value={authToken}
-                    onChange={(e) => setAuthToken(e.target.value)}
-                    placeholder="Paste your authorization token here..."
-                    className="w-full p-3 border rounded text-sm font-mono"
-                    rows="3"
-                  />
-                  <button
-                    onClick={handleAuthSubmit}
-                    disabled={!authToken.trim()}
-                    className="w-full py-2 px-4 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                  >
-                    Submit Authorization Token
-                  </button>
+                <div className="bg-white p-3 rounded border border-blue-200">
+                  <p><strong>Step 2: Find and Copy Tokens</strong></p>
+                  <ol className="list-decimal ml-4 mt-1 space-y-1">
+                    <li>Look for a cookie named <strong>"csrf"</strong> - copy its value</li>
+                    <li>Look for a cookie named <strong>"authorization"</strong> - copy its value</li>
+                    <li>Paste both values in the fields below</li>
+                  </ol>
                 </div>
               </div>
+            </div>
+
+            {/* Token Input Forms */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  CSRF Token
+                </label>
+                <textarea
+                  value={csrfToken}
+                  onChange={(e) => setCsrfToken(e.target.value)}
+                  placeholder="Paste the 'csrf' cookie value here..."
+                  className="w-full p-3 border rounded text-sm font-mono"
+                  rows="2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Authorization Token
+                </label>
+                <textarea
+                  value={authToken}
+                  onChange={(e) => setAuthToken(e.target.value)}
+                  placeholder="Paste the 'authorization' cookie value here..."
+                  className="w-full p-3 border rounded text-sm font-mono"
+                  rows="3"
+                />
+              </div>
+
+              <button
+                onClick={handleTokenSubmit}
+                disabled={!csrfToken.trim() || !authToken.trim()}
+                className="w-full py-3 px-4 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 font-medium"
+              >
+                Save Tokens & Continue
+              </button>
             </div>
 
             <div className="flex space-x-3">
@@ -550,4 +471,5 @@ try {
     </div>
   );
 };
+
 export default SimplifyUploadModal;
