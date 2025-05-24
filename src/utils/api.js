@@ -345,65 +345,27 @@ export const jobsApi = {
 
 // Simplify API
 export const simplifyApi = {
-  // Check if user has captured CSRF token
-  async checkSession() {
-    const response = await fetch(`${API_BASE_URL}/api/simplify/check-session`, {
-return apiRequest('/api/simplify/check-session');
+  storeSession: (sessionData) => {
+    return apiRequest('/api/simplify/store-session', {
+      method: 'POST',
+      body: JSON.stringify(sessionData)
+    });
   },
 
-  // Get upload configuration for frontend upload
-  async getUploadConfig(resumeId, jobId = null) {
-    const formData = new FormData();
-    formData.append('resume_id', resumeId);
-    if (jobId) formData.append('job_id', jobId);
-
-    const response = await fetch(`${API_BASE_URL}/api/simplify/get-upload-config`, {
+  uploadResume: (resumeId, jobId = null) => {
+    return apiRequest('/api/simplify/upload-resume', {
       method: 'POST',
-      headers: {
-        'X-User-Id': getCurrentUserId()
-      },
-      credentials: 'include',
-      body: formData
+      body: JSON.stringify({
+        resume_id: resumeId,
+        job_id: jobId
+      })
     });
-
-    if (!response.ok) {
-      throw new Error(`Failed to get upload config: ${response.statusText}`);
-    }
-
-    return response.json();
   },
 
-  // Upload PDF directly to Simplify (frontend handles this)
-  async uploadPdfToSimplify(pdfBlob, uploadConfig, filename = 'resume.pdf') {
-    const formData = new FormData();
-    formData.append('file', pdfBlob, filename);
-
-    const response = await fetch(uploadConfig.upload_url, {
-      method: 'POST',
-      headers: uploadConfig.headers,
-      credentials: 'include', // This ensures HttpOnly cookies are sent
-      body: formData
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Simplify upload failed: ${response.status} - ${errorText}`);
-    }
-
-    try {
-      return await response.json();
-    } catch {
-      return { message: 'Upload successful', status: response.status };
-    }
+  checkSession: () => {
+    return apiRequest('/api/simplify/check-session');
   }
 };
-
-// Helper function to get current user ID
-function getCurrentUserId() {
-  // This should match how you get the current user ID in your app
-  // For example, from Firebase Auth or your auth context
-  return window.currentUser?.uid || 'default_user';
-}
 
 // Enhanced health check function without credentials
 export const healthCheck = async () => {
