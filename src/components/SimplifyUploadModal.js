@@ -296,209 +296,89 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
               <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300 mb-3">
                 <a
                   href={`javascript:(function(){
-try {
-  console.log('🔍 JobTrak Token Capture Starting...');
-  
-  var apiUrl = '${process.env.REACT_APP_API_BASE_URL || 'https://jobtrackai.duckdns.org'}';
-  var userId = '${currentUser?.uid}';
-  
-  if (!userId) {
-    alert('❌ Error: No user ID found. Please make sure you are logged into JobTrak.');
-    return;
-  }
-  
-  console.log('👤 Using User ID:', userId);
-  console.log('🌐 API URL:', apiUrl);
-  
-  // Get all cookies
-  var cookies = {};
-  document.cookie.split(';').forEach(function(cookie) {
-    var parts = cookie.trim().split('=');
-    if (parts[0] && parts[1]) {
-      cookies[parts[0]] = decodeURIComponent(parts[1]);
-    }
-  });
-  
-  console.log('🍪 All cookies found:', Object.keys(cookies));
-  
-  var csrf = cookies.csrf;
-  var auth = null;
-  var tokenSource = '';
-  
-  // Method 1: Check all cookie variations
-  var cookieChecks = ['authorization', 'auth', 'token', 'jwt', 'access_token', 'authToken'];
-  for (var i = 0; i < cookieChecks.length; i++) {
-    if (cookies[cookieChecks[i]]) {
-      auth = cookies[cookieChecks[i]];
-      tokenSource = 'cookie:' + cookieChecks[i];
-      console.log('✅ Found auth in cookie:', cookieChecks[i]);
-      break;
-    }
-  }
-  
-  // Method 2: localStorage variations
-  if (!auth) {
-    var localStorageKeys = ['featurebaseGlobalAuth', 'auth', 'authToken', 'access_token', 'jwt', 'token', 'simplify_auth', 'userAuth'];
-    for (var j = 0; j < localStorageKeys.length; j++) {
-      try {
-        var item = localStorage.getItem(localStorageKeys[j]);
-        if (item) {
-          console.log('🔍 Checking localStorage key:', localStorageKeys[j], 'Value preview:', item.substring(0, 50) + '...');
-          
-          // Try to parse as JSON first
-          try {
-            var parsed = JSON.parse(item);
-            if (parsed.jwt) {
-              auth = parsed.jwt;
-              tokenSource = 'localStorage:' + localStorageKeys[j] + '.jwt';
-              console.log('✅ Found JWT in localStorage:', localStorageKeys[j]);
-              break;
-            }
-            if (parsed.token) {
-              auth = parsed.token;
-              tokenSource = 'localStorage:' + localStorageKeys[j] + '.token';
-              console.log('✅ Found token in localStorage:', localStorageKeys[j]);
-              break;
-            }
-            if (parsed.access_token) {
-              auth = parsed.access_token;
-              tokenSource = 'localStorage:' + localStorageKeys[j] + '.access_token';
-              console.log('✅ Found access_token in localStorage:', localStorageKeys[j]);
-              break;
-            }
-          } catch(parseError) {
-            // If not JSON, check if it looks like a token
-            if (item.length > 20 && (item.startsWith('eyJ') || item.includes('.'))) {
-              auth = item;
-              tokenSource = 'localStorage:' + localStorageKeys[j] + '(raw)';
-              console.log('✅ Found raw token in localStorage:', localStorageKeys[j]);
-              break;
-            }
-          }
-        }
-      } catch(e) {
-        console.log('❌ Error checking localStorage key:', localStorageKeys[j], e.message);
-      }
-    }
-  }
-  
-  // Method 3: sessionStorage variations
-  if (!auth) {
-    var sessionStorageKeys = ['auth', 'authToken', 'access_token', 'jwt', 'token', 'simplify_auth', 'userAuth'];
-    for (var k = 0; k < sessionStorageKeys.length; k++) {
-      try {
-        var sessionItem = sessionStorage.getItem(sessionStorageKeys[k]);
-        if (sessionItem) {
-          console.log('🔍 Checking sessionStorage key:', sessionStorageKeys[k], 'Value preview:', sessionItem.substring(0, 50) + '...');
-          
-          try {
-            var sessionParsed = JSON.parse(sessionItem);
-            if (sessionParsed.jwt) {
-              auth = sessionParsed.jwt;
-              tokenSource = 'sessionStorage:' + sessionStorageKeys[k] + '.jwt';
-              console.log('✅ Found JWT in sessionStorage:', sessionStorageKeys[k]);
-              break;
-            }
-            if (sessionParsed.token) {
-              auth = sessionParsed.token;
-              tokenSource = 'sessionStorage:' + sessionStorageKeys[k] + '.token';
-              console.log('✅ Found token in sessionStorage:', sessionStorageKeys[k]);
-              break;
-            }
-          } catch(sessionParseError) {
-            if (sessionItem.length > 20 && (sessionItem.startsWith('eyJ') || sessionItem.includes('.'))) {
-              auth = sessionItem;
-              tokenSource = 'sessionStorage:' + sessionStorageKeys[k] + '(raw)';
-              console.log('✅ Found raw token in sessionStorage:', sessionStorageKeys[k]);
-              break;
-            }
-          }
-        }
-      } catch(e) {
-        console.log('❌ Error checking sessionStorage key:', sessionStorageKeys[k], e.message);
-      }
-    }
-  }
-  
-  // Method 4: Check for JWT in page scripts or window objects
-  if (!auth) {
-    try {
-      if (window.auth) {
-        auth = window.auth;
-        tokenSource = 'window.auth';
-        console.log('✅ Found auth in window.auth');
-      } else if (window.authToken) {
-        auth = window.authToken;
-        tokenSource = 'window.authToken';
-        console.log('✅ Found auth in window.authToken');
-      }
-    } catch(e) {
-      console.log('❌ Error checking window objects:', e.message);
-    }
-  }
-  
-  console.log('🔍 Final Token Status:');
-  console.log('  CSRF:', !!csrf, csrf ? '(found)' : '(missing)');
-  console.log('  Auth:', !!auth, auth ? '(found from ' + tokenSource + ')' : '(missing)');
-  if (auth) {
-    console.log('  Auth preview:', auth.substring(0, 30) + '...');
-  }
-  
-  if (!auth || !csrf) {
-    var detailedError = 'Missing tokens:\\n\\n';
-    detailedError += 'CSRF Token: ' + (csrf ? '✅ Found' : '❌ Missing') + '\\n';
-    detailedError += 'Auth Token: ' + (auth ? '✅ Found from ' + tokenSource : '❌ Missing') + '\\n\\n';
-    detailedError += 'Available cookies: ' + Object.keys(cookies).join(', ') + '\\n\\n';
-    detailedError += 'Make sure you are logged into Simplify Jobs and try again.';
-    
-    alert('❌ ' + detailedError);
-    return;
-  }
-  
-  console.log('📤 Sending tokens to JobTrak...');
-  
-  var payload = {
-    cookies: document.cookie,
-    csrf: csrf,
-    authorization: auth,
-    url: location.href,
-    timestamp: new Date().toISOString(),
-    token_source: tokenSource
-  };
-  
-  fetch(apiUrl + '/api/simplify/auto-capture', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': userId
-    },
-    credentials: 'include',
-    body: JSON.stringify(payload)
-  })
-  .then(function(response) {
-    console.log('📡 Response status:', response.status);
-    if (response.ok) {
-      return response.json();
-    } else {
-      return response.text().then(function(text) {
-        throw new Error('HTTP ' + response.status + ': ' + text);
-      });
-    }
-  })
-  .then(function(result) {
-    console.log('✅ Success:', result);
-    alert('✅ Tokens captured successfully!\\n\\nAuth source: ' + tokenSource + '\\n\\nGo back to JobTrak and refresh the modal.');
-  })
-  .catch(function(error) {
-    console.error('❌ Error:', error);
-    alert('❌ Failed to capture tokens:\\n\\n' + error.message + '\\n\\nToken was found from: ' + tokenSource);
-  });
-  
-} catch(error) {
-  console.error('❌ Bookmarklet Error:', error);
-  alert('❌ Bookmarklet Error:\\n\\n' + error.message + '\\n\\nCheck browser console for details.');
-}
-})();`}
+                    console.log('🔍 JobTrak Token Capture Starting...');
+                    
+                    // Get cookies
+                    var cookies = document.cookie.split(';').reduce((acc, cookie) => {
+                      var [key, value] = cookie.trim().split('=');
+                      if (key && value) acc[key] = decodeURIComponent(value);
+                      return acc;
+                    }, {});
+                    
+                    var csrf = cookies.csrf;
+                    var auth = null;
+                    
+                    // Try multiple sources for auth token
+                    try {
+                      // Method 1: localStorage featurebaseGlobalAuth
+                      var fb = localStorage.getItem('featurebaseGlobalAuth');
+                      if (fb) {
+                        var parsed = JSON.parse(fb);
+                        auth = parsed.jwt;
+                        console.log('✅ Found auth in featurebaseGlobalAuth');
+                      }
+                    } catch(e) {
+                      console.log('❌ No featurebaseGlobalAuth found');
+                    }
+                    
+                    // Method 2: Check for authorization cookie
+                    if (!auth && cookies.authorization) {
+                      auth = cookies.authorization;
+                      console.log('✅ Found auth in cookies');
+                    }
+                    
+                    // Method 3: Check sessionStorage
+                    if (!auth) {
+                      try {
+                        var keys = Object.keys(sessionStorage);
+                        for (var i = 0; i < keys.length; i++) {
+                          var item = sessionStorage.getItem(keys[i]);
+                          if (item && item.includes('jwt') || item.includes('token')) {
+                            console.log('🔍 Found potential token in sessionStorage:', keys[i]);
+                          }
+                        }
+                      } catch(e) {}
+                    }
+                    
+                    console.log('🔍 Token Status - CSRF:', !!csrf, 'Auth:', !!auth);
+                    console.log('🍪 Available cookies:', Object.keys(cookies));
+                    
+                    if (!auth || !csrf) {
+                      alert('❌ Tokens not found!\\n\\nCSRF: ' + (csrf ? '✅' : '❌') + '\\nAuth: ' + (auth ? '✅' : '❌') + '\\n\\nMake sure you\\'re logged into Simplify Jobs and try again.');
+                      return;
+                    }
+                    
+                    console.log('📤 Sending tokens to JobTrak...');
+                    console.log('👤 Using User ID: ${currentUser?.uid}');
+                    
+                    fetch('${process.env.REACT_APP_API_BASE_URL || 'https://jobtrackai.duckdns.org'}/api/simplify/auto-capture', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Id': '${currentUser?.uid}'
+                      },
+                      credentials: 'include',
+                      body: JSON.stringify({
+                        cookies: document.cookie,
+                        csrf: csrf,
+                        authorization: auth,
+                        url: location.href,
+                        timestamp: new Date().toISOString()
+                      })
+                    })
+                    .then(response => {
+                      console.log('📡 Response status:', response.status);
+                      return response.ok ? response.json() : response.text().then(text => Promise.reject(text));
+                    })
+                    .then(result => {
+                      console.log('✅ Success:', result);
+                      alert('✅ Tokens captured successfully!\\n\\nGo back to JobTrak and refresh the modal.');
+                    })
+                    .catch(error => {
+                      console.error('❌ Error:', error);
+                      alert('❌ Failed to capture tokens:\\n\\n' + error);
+                    });
+                  })();`}
                   className="inline-block px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium cursor-move select-all"
                   draggable="true"
                   onClick={(e) => e.preventDefault()}
