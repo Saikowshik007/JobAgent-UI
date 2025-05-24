@@ -334,40 +334,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
 
               <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300 mb-3">
                 <a
-                  href={`javascript:(function(){
-try {
-  console.log('🔍 JobTrak CSRF Token Capture...');
-
-  var cookies = {};
-  document.cookie.split(';').forEach(function(cookie) {
-    var parts = cookie.trim().split('=');
-    if (parts[0] && parts[1]) {
-      cookies[parts[0]] = decodeURIComponent(parts[1]);
-    }
-  });
-
-  var csrf = cookies.csrf;
-
-  console.log('🔍 CSRF Token Status:', !!csrf);
-  console.log('🍪 Available cookies:', Object.keys(cookies));
-
-  if (!csrf) {
-    alert('❌ CSRF token not found!\\n\\nMake sure you are logged into Simplify Jobs and try again.');
-    return;
-  }
-
-  // Store CSRF token in localStorage for JobTrak to use
-  localStorage.setItem('simplify_csrf_token', csrf);
-  localStorage.setItem('simplify_csrf_captured_at', new Date().toISOString());
-
-  console.log('✅ CSRF token stored in localStorage');
-  alert('✅ CSRF token captured successfully!\\n\\nGo back to JobTrak and refresh the modal.\\n\\nNote: Authorization cookie will be sent automatically by your browser.');
-
-} catch(error) {
-  console.error('❌ Bookmarklet Error:', error);
-  alert('❌ Bookmarklet Error:\\n\\n' + error.message + '\\n\\nCheck browser console for details.');
-}
-})();`}
+                  href="javascript:(function(){try{console.log('🔍 JobTrak CSRF Token Capture...');var cookies={};document.cookie.split(';').forEach(function(cookie){var parts=cookie.trim().split('=');if(parts[0]&&parts[1]){cookies[parts[0]]=decodeURIComponent(parts[1]);}});var csrf=cookies.csrf;console.log('🔍 CSRF Token Status:',!!csrf);console.log('🍪 Available cookies:',Object.keys(cookies));if(csrf){localStorage.setItem('simplify_csrf_token',csrf);localStorage.setItem('simplify_csrf_captured_at',new Date().toISOString());console.log('✅ CSRF token stored in localStorage');alert('✅ CSRF token captured successfully!\\n\\nGo back to JobTrak and refresh the modal.\\n\\nNote: Authorization cookie will be sent automatically by your browser.');}else{console.log('❌ CSRF token not found');alert('❌ CSRF token not found!\\n\\nMake sure you are logged into Simplify Jobs and try again.');}}catch(error){console.error('❌ Bookmarklet Error:',error);alert('❌ Bookmarklet Error:\\n\\n'+error.message+'\\n\\nCheck browser console for details.');}})()"
                   className="inline-block px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium cursor-move select-all"
                   draggable="true"
                   onClick={(e) => e.preventDefault()}
