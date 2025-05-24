@@ -226,7 +226,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
         throw new Error('Missing authentication tokens. Please capture tokens first.');
       }
 
-      console.log('🔑 Got tokens, uploading to Simplify API...');
+      console.log('🔑 Got tokens, uploading directly to Simplify API...');
 
       // Create form data for multipart upload
       const formData = new FormData();
@@ -249,7 +249,6 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
           'sec-fetch-site': 'same-site',
           'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
           'x-csrf-token': tokenData.csrf,
-          'authorization': `Bearer ${tokenData.authorization}`,
         },
         body: formData,
         credentials: 'include'

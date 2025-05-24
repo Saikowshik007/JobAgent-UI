@@ -343,7 +343,7 @@ export const jobsApi = {
   }
 };
 
-// Simplify API
+// Simplify API - Replace the existing simplifyApi section in your api.js file with this
 export const simplifyApi = {
   storeSession: (sessionData) => {
     return apiRequest('/api/simplify/store-session', {
@@ -352,18 +352,19 @@ export const simplifyApi = {
     });
   },
 
-  uploadResume: (resumeId, jobId = null) => {
-    return apiRequest('/api/simplify/upload-resume', {
-      method: 'POST',
-      body: JSON.stringify({
-        resume_id: resumeId,
-        job_id: jobId
-      })
-    });
-  },
-
   checkSession: () => {
     return apiRequest('/api/simplify/check-session');
+  },
+
+  getStoredTokens: () => {
+    return apiRequest('/api/simplify/get-tokens');
+  },
+
+  autoCaptureTokens: (tokenData) => {
+    return apiRequest('/api/simplify/auto-capture', {
+      method: 'POST',
+      body: JSON.stringify(tokenData)
+    });
   }
 };
 
