@@ -84,7 +84,8 @@ async function apiRequest(endpoint, options = {}) {
     headers,
     // CORS configuration
     mode: 'cors',
-    credentials: 'include',
+    // Only include credentials for authenticated endpoints
+    credentials: user ? 'include' : 'omit',
     // Add cache control for development
     ...(process.env.NODE_ENV === 'development' && {
       cache: 'no-cache'
@@ -366,14 +367,17 @@ export const simplifyApi = {
   }
 };
 
-// Enhanced health check function
+// Enhanced health check function without credentials
 export const healthCheck = async () => {
   try {
     console.log('Performing health check...');
+
+    // First try without credentials (should work with any CORS setup)
     const response = await fetch(`${API_BASE_URL}/api/status`, {
       method: 'GET',
       mode: 'cors',
-      credentials: 'include',
+      // Remove credentials for health check to avoid CORS issues
+      // credentials: 'include',
       headers: {
         'Accept': 'application/json'
       }
