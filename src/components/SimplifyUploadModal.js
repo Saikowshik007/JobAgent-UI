@@ -401,12 +401,12 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
               </p>
               <div className="bg-white p-3 rounded border-2 border-dashed border-purple-300 mb-3">
                 <a
-                  href="javascript:(function(){var c=document.cookie.split(';').reduce((a,x)=>{var p=x.trim().split('=');if(p[0]&&p[1])a[p[0]]=decodeURIComponent(p[1]);return a;},{});var auth=c.authorization;var csrf=c.csrf;if(!auth||!csrf){alert('Tokens not found. Check console.');console.log('Available cookies:',Object.keys(c));return;}fetch('https://jobtrackai.duckdns.org/api/simplify/auto-capture',{method:'POST',headers:{'Content-Type':'application/json','X-User-Id':'bookmarklet'},credentials:'include',body:JSON.stringify({cookies:document.cookie,csrf:csrf,authorization:auth,url:location.href,timestamp:new Date().toISOString()})}).then(r=>r.ok?alert('✅ Tokens captured!'):alert('❌ Failed')).catch(e=>alert('❌ Error: '+e.message));})();"
+                  href="javascript:(function(){var c=document.cookie.split(';').reduce((a,x)=>{var p=x.trim().split('=');if(p[0]&&p[1])a[p[0]]=decodeURIComponent(p[1]);return a;},{});var csrf=c.csrf;var auth=null;try{var fb=localStorage.getItem('featurebaseGlobalAuth');if(fb){var parsed=JSON.parse(fb);auth=parsed.jwt;}}catch(e){}if(!auth||!csrf){alert('Tokens not found. CSRF: '+(csrf?'✓':'✗')+' Auth: '+(auth?'✓':'✗'));return;}fetch('https://jobtrackai.duckdns.org/api/simplify/auto-capture',{method:'POST',headers:{'Content-Type':'application/json','X-User-Id':'bookmarklet'},credentials:'include',body:JSON.stringify({cookies:document.cookie,csrf:csrf,authorization:auth,url:location.href,timestamp:new Date().toISOString()})}).then(r=>r.ok?alert('✅ Tokens captured! Go back to JobTrak and refresh.'):r.text().then(t=>alert('❌ Failed: '+t))).catch(e=>alert('❌ Error: '+e.message));})();"
                   className="inline-block px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm font-medium cursor-move select-all"
                   draggable="true"
                   onClick={(e) => e.preventDefault()}
                 >
-                  📌 JobTrak Token Capture (Fixed)
+                  📌 JobTrak Token Capture (Working!)
                 </a>
               </div>
               <div className="text-xs text-purple-600 space-y-1">
@@ -425,7 +425,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
                 <p className="font-medium text-yellow-800">Debug Helper:</p>
                 <p className="text-yellow-700">If the bookmarklet fails, open browser console (F12) on Simplify.jobs and run:</p>
                 <code className="block mt-1 p-1 bg-white rounded text-xs">
-                  console.log('Cookies:', document.cookie.split(';').map(c => c.trim().split('=')[0]));
+                  console.log('CSRF:', document.cookie.includes('csrf')); console.log('Auth:', !!localStorage.getItem('featurebaseGlobalAuth'));
                 </code>
               </div>
             </div>
