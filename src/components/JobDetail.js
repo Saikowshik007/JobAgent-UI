@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef  } from 'react';
-import { jobsApi } from '../utils/api';
+import { jobsApi,resumeApi } from '../utils/api';
 import ResumeStatusTracker from './ResumeStatusTracker';
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
@@ -210,7 +210,7 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
     setResumeMessage('Saving resume changes...');
 
     // Call the API to save the updated YAML content
-    await jobsApi.saveResumeYaml(resumeId, yamlContent);
+    await resumeApi.saveResumeYaml(resumeId, yamlContent);
 
     // Update the local state with the new YAML content
     setResumeYaml(yamlContent);
