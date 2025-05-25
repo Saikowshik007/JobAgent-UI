@@ -28,7 +28,7 @@ function JobDetail({ job, onStatusChange }) {
   useEffect(() => {
     setResumeError('');
     setResumeMessage('');
-    setShowStatusTracker(false);
+    // Don't clear showStatusTracker here as it might interfere with resume generation
     setUploadingToSimplify(false);
     setFetchingYamlForModal(false);
   }, [job.id]); // Clear when job ID changes
@@ -73,7 +73,7 @@ function JobDetail({ job, onStatusChange }) {
         !fetchingYaml.current) {
       fetchResumeYaml();
     }
-  }, [resumeId, resumeYaml]);
+  }, [resumeId, resumeYaml, job.status, job.id]); // Added job.status and job.id to dependencies
 
 const fetchResumeYaml = async () => {
   if (fetchingYaml.current || yamlFetched.current) {
