@@ -1,4 +1,4 @@
-// ResumeYamlModal.js - Form-based editor with removable fields
+// ResumeYamlModal.js - Fixed version with better objective handling
 import React, { useState, useEffect, useRef } from 'react';
 import yaml from 'js-yaml';
 import { Document, Page, Text, View, StyleSheet, PDFViewer, Font, Link } from '@react-pdf/renderer';
@@ -42,89 +42,105 @@ const styles = StyleSheet.create({
   projectTitle: { fontWeight: 'bold', color: 'blue', textDecoration: 'none' },
 });
 
-const ResumeDocument = ({ data }) => (
-  <Document>
-    <Page size="A4" style={styles.page}>
-      {data.basic && (
-        <>
-          <Text style={styles.header}>{data.basic.name}</Text>
-          <Text style={styles.contact}>
-            {[data.basic.email, data.basic.phone, ...(data.basic.websites || [])].filter(Boolean).join(' | ')}
-          </Text>
-        </>
-      )}
+const ResumeDocument = ({ data }) => {
+  // Debug: Log the data to see what we're getting
+  console.log('ResumeDocument received data:', data);
+  console.log('Objective value:', data.objective);
+  console.log('Objective type:', typeof data.objective);
+  console.log('Objective is null/undefined:', data.objective == null);
 
-      {data.objective && (
-        <>
-          <Text style={styles.sectionTitle}>Objective</Text>
-          <Text style={styles.textNormal}>{data.objective}</Text>
-        </>
-      )}
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        {/* Header */}
+        {data.basic && (
+          <>
+            <Text style={styles.header}>{data.basic.name || 'Your Name'}</Text>
+            <Text style={styles.contact}>
+              {[data.basic.email, data.basic.phone, ...(data.basic.websites || [])].filter(Boolean).join(' | ')}
+            </Text>
+          </>
+        )}
 
-      {data.experiences && (
-        <>
-          <Text style={styles.sectionTitle}>Experience</Text>
-          {data.experiences.map((exp, idx) => (
-            <View key={idx} style={styles.jobBlock}>
-              <View style={styles.row}>
-                <Text style={{ fontWeight: 'bold' }}>{exp.company}</Text>
-                <Text>{exp.titles?.[0]?.startdate} - {exp.titles?.[0]?.enddate}</Text>
+        {/* Objective Section - FIXED */}
+        {data.objective && data.objective.trim() && (
+          <>
+            <Text style={styles.sectionTitle}>Objective</Text>
+            <Text style={styles.textNormal}>{data.objective}</Text>
+          </>
+        )}
+
+        {/* Experience Section */}
+        {data.experiences && data.experiences.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Experience</Text>
+            {data.experiences.map((exp, idx) => (
+              <View key={idx} style={styles.jobBlock}>
+                <View style={styles.row}>
+                  <Text style={{ fontWeight: 'bold' }}>{exp.company || 'Company Name'}</Text>
+                  <Text>{exp.titles?.[0]?.startdate} - {exp.titles?.[0]?.enddate}</Text>
+                </View>
+                <View style={styles.row}>
+                  <Text style={styles.jobTitle}>{exp.titles?.[0]?.name || exp.titles?.[0]?.title}</Text>
+                  <Text style={styles.jobTitle}>{exp.location}</Text>
+                </View>
+                {exp.highlights?.map((point, i) => (
+                  <Text key={i} style={styles.bullet}>• {point}</Text>
+                ))}
               </View>
-              <View style={styles.row}>
-                <Text style={styles.jobTitle}>{exp.titles?.[0]?.name}</Text>
-                <Text style={styles.jobTitle}>{exp.location}</Text>
+            ))}
+          </>
+        )}
+
+        {/* Projects Section */}
+        {data.projects && data.projects.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Projects</Text>
+            {data.projects.map((proj, idx) => (
+              <View key={idx} style={styles.jobBlock}>
+                {proj.link ? (
+                  <Link src={proj.link} style={styles.projectTitle}>{proj.name}</Link>
+                ) : (
+                  <Text style={{ fontWeight: 'bold' }}>{proj.name}</Text>
+                )}
+                {proj.highlights?.map((point, i) => (
+                  <Text key={i} style={styles.bullet}>• {point}</Text>
+                ))}
               </View>
-              {exp.highlights?.map((point, i) => (
-                <Text key={i} style={styles.bullet}>• {point}</Text>
-              ))}
-            </View>
-          ))}
-        </>
-      )}
+            ))}
+          </>
+        )}
 
-      {data.projects && (
-        <>
-          <Text style={styles.sectionTitle}>Projects</Text>
-          {data.projects.map((proj, idx) => (
-            <View key={idx} style={styles.jobBlock}>
-              {proj.link ? (
-                <Link src={proj.link} style={styles.projectTitle}>{proj.name}</Link>
-              ) : (
-                <Text style={{ fontWeight: 'bold' }}>{proj.name}</Text>
-              )}
-              {proj.highlights?.map((point, i) => (
-                <Text key={i} style={styles.bullet}>• {point}</Text>
-              ))}
-            </View>
-          ))}
-        </>
-      )}
-
-      {data.education && (
-        <>
-          <Text style={styles.sectionTitle}>Education</Text>
-          {data.education.map((edu, idx) => (
-            <View key={idx} style={styles.jobBlock}>
-              <View style={styles.row}>
-                <Text style={{ fontWeight: 'bold' }}>{edu.school}, {edu.degrees?.[0]?.names?.join(', ')}</Text>
-                <Text>{edu.degrees?.[0]?.dates}</Text>
+        {/* Education Section */}
+        {data.education && data.education.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Education</Text>
+            {data.education.map((edu, idx) => (
+              <View key={idx} style={styles.jobBlock}>
+                <View style={styles.row}>
+                  <Text style={{ fontWeight: 'bold' }}>{edu.school}, {edu.degrees?.[0]?.names?.join(', ')}</Text>
+                  <Text>{edu.degrees?.[0]?.dates}</Text>
+                </View>
               </View>
-            </View>
-          ))}
-        </>
-      )}
+            ))}
+          </>
+        )}
 
-      {data.skills && (
-        <>
-          <Text style={styles.sectionTitle}>Skills</Text>
-          {data.skills.map((s, idx) => (
-            <Text key={idx}><Text style={{ fontWeight: 'bold' }}>{s.category}:</Text> {s.skills.join(', ')}</Text>
-          ))}
-        </>
-      )}
-    </Page>
-  </Document>
-);
+        {/* Skills Section */}
+        {data.skills && data.skills.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Skills</Text>
+            {data.skills.map((s, idx) => (
+              <Text key={idx} style={styles.textNormal}>
+                <Text style={{ fontWeight: 'bold' }}>{s.category}:</Text> {s.skills.join(', ')}
+              </Text>
+            ))}
+          </>
+        )}
+      </Page>
+    </Document>
+  );
+};
 
 // Delete button component for consistency
 const DeleteButton = ({ onClick }) => (
@@ -151,6 +167,9 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
     if (yamlContent) {
       try {
         const parsed = yaml.load(yamlContent);
+        console.log('Parsed YAML data:', parsed);
+        console.log('Objective in parsed data:', parsed.objective);
+
         setResumeData(parsed);
         setYamlString(yamlContent);
       } catch (err) {
@@ -167,7 +186,12 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
 
   const updateYamlString = (newData) => {
     try {
+      console.log('Updating YAML with data:', newData);
+      console.log('Objective in new data:', newData.objective);
+
       const newYaml = yaml.dump(newData, { lineWidth: -1, noRefs: true });
+      console.log('Generated YAML:', newYaml);
+
       setYamlString(newYaml);
     } catch (err) {
       console.error("Error generating YAML:", err);
@@ -232,17 +256,22 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
     updateYamlString(newData);
   };
 
-  // Objective handler
+  // FIXED: Objective handler with better debugging
   const handleObjectiveChange = (e) => {
+    const objectiveValue = e.target.value;
+    console.log('Objective changed to:', objectiveValue);
+
     const newData = {
       ...resumeData,
-      objective: e.target.value
+      objective: objectiveValue
     };
+
+    console.log('New resume data with objective:', newData);
     setResumeData(newData);
     updateYamlString(newData);
   };
 
-  // Education handlers
+  // Education handlers (keeping existing code)
   const handleEducationChange = (schoolIndex, field, value) => {
     const schools = [...(resumeData.education || [])];
     schools[schoolIndex] = {
@@ -319,7 +348,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
     updateYamlString(newData);
   };
 
-  // Experience handlers
+  // Experience handlers (keeping existing code)
   const handleExperienceChange = (expIndex, field, value) => {
     const experiences = [...(resumeData.experiences || [])];
     experiences[expIndex] = {
@@ -418,7 +447,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
     updateYamlString(newData);
   };
 
-  // Skills handlers
+  // Skills handlers (keeping existing code)
   const handleSkillCategoryChange = (catIndex, value) => {
     const skills = [...(resumeData.skills || [])];
     skills[catIndex].category = value;
@@ -493,7 +522,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
     updateYamlString(newData);
   };
 
-  // Project handlers
+  // Project handlers (keeping existing code)
   const handleProjectChange = (projIndex, field, value) => {
     const projects = [...(resumeData.projects || [])];
     projects[projIndex] = {
@@ -575,6 +604,8 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
 
   const handleSave = () => {
     if (resumeData) {
+      console.log('Saving resume data:', resumeData);
+      console.log('Saving YAML string:', yamlString);
       onSave(yamlString, resumeData);
       onClose();
     }
@@ -613,7 +644,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
 
         {/* Content */}
         <div className="flex-1 overflow-hidden p-4 flex flex-col">
-          {/* Tabs */}
+          {/* Tabs - UPDATED with Objective tab */}
           <div className="border-b border-gray-200 mb-4">
             <nav className="-mb-px flex space-x-6" aria-label="Tabs">
               <button
@@ -625,6 +656,16 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                 } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm`}
               >
                 Basic Info
+              </button>
+              <button
+                onClick={() => setActiveTab("objective")}
+                className={`${
+                  activeTab === "objective"
+                    ? "border-indigo-500 text-indigo-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm`}
+              >
+                Objective
               </button>
               <button
                 onClick={() => setActiveTab("education")}
@@ -710,7 +751,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                             name="name"
                             id="name"
                             className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-                            value={resumeData.basic.name || ""}
+                            value={resumeData.basic?.name || ""}
                             onChange={handleBasicInfoChange}
                           />
                         </div>
@@ -723,7 +764,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                             name="address"
                             id="address"
                             className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-                            value={resumeData.basic.address || ""}
+                            value={resumeData.basic?.address || ""}
                             onChange={handleBasicInfoChange}
                             placeholder="City, State"
                           />
@@ -737,7 +778,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                             name="email"
                             id="contact-email"
                             className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-                            value={resumeData.basic.email || ""}
+                            value={resumeData.basic?.email || ""}
                             onChange={handleBasicInfoChange}
                           />
                         </div>
@@ -750,7 +791,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                             name="phone"
                             id="phone"
                             className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-                            value={resumeData.basic.phone || ""}
+                            value={resumeData.basic?.phone || ""}
                             onChange={handleBasicInfoChange}
                           />
                         </div>
@@ -761,7 +802,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                         <label className="block text-sm font-medium text-gray-700">
                           Websites/Profiles
                         </label>
-                        {(resumeData.basic.websites || []).map((website, index) => (
+                        {(resumeData.basic?.websites || []).map((website, index) => (
                           <div key={index} className="flex items-center mt-2">
                             <input
                               type="text"
@@ -781,19 +822,52 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                           + Add Website
                         </button>
                       </div>
+                    </div>
+                  )}
 
-                      {/* Objective */}
-                      <div className="mt-6">
-                        <label className="block text-sm font-medium text-gray-700">
+                  {/* NEW: Dedicated Objective Tab */}
+                  {activeTab === "objective" && (
+                    <div className="space-y-4">
+                      <h4 className="text-lg font-medium text-gray-900">Professional Objective</h4>
+
+                      {/* Debug info - remove in production */}
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm">
+                        <strong>Debug Info:</strong>
+                        <br />Current objective value: "{resumeData.objective}"
+                        <br />Type: {typeof resumeData.objective}
+                        <br />Is empty: {!resumeData.objective || resumeData.objective.trim() === ''}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
                           Professional Summary/Objective
                         </label>
+                        <p className="text-sm text-gray-500 mb-3">
+                          Write a brief 2-3 sentence summary of your professional background, key skills, and career goals.
+                          This should be tailored to the specific job you're applying for.
+                        </p>
                         <textarea
-                          rows={4}
+                          rows={6}
                           className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full sm:text-sm border border-gray-300 rounded-md"
-                          placeholder="Write a brief summary of your professional background and goals"
+                          placeholder="Example: Experienced software engineer with 5+ years in full-stack development seeking to leverage expertise in React and Node.js to contribute to innovative web applications at a fast-growing technology company."
                           value={resumeData.objective || ""}
                           onChange={handleObjectiveChange}
-                        ></textarea>
+                        />
+                        <div className="mt-2 text-sm text-gray-500">
+                          Characters: {(resumeData.objective || "").length} / 500 (recommended max)
+                        </div>
+                      </div>
+
+                      {/* Tips section */}
+                      <div className="mt-6 p-4 bg-gray-50 rounded-md">
+                        <h5 className="font-medium text-gray-900 mb-2">💡 Tips for a Strong Objective:</h5>
+                        <ul className="text-sm text-gray-700 space-y-1">
+                          <li>• Keep it concise (2-3 sentences)</li>
+                          <li>• Include your years of experience</li>
+                          <li>• Mention 2-3 key skills relevant to the job</li>
+                          <li>• State what type of role you're seeking</li>
+                          <li>• Tailor it to the specific company/position</li>
+                        </ul>
                       </div>
                     </div>
                   )}
@@ -941,7 +1015,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                   <input
                                     type="text"
                                     className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-                                    value={title.name || ""}
+                                    value={title.name || title.title || ""}
                                     onChange={(e) => handleTitleChange(expIndex, titleIndex, 'name', e.target.value)}
                                   />
                                 </div>
@@ -985,7 +1059,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                   value={highlight}
                                   onChange={(e) => handleHighlightChange(expIndex, highlightIndex, e.target.value)}
                                   placeholder="Describe an achievement or responsibility"
-                                ></textarea>
+                                />
                                 <DeleteButton onClick={() => removeHighlight(expIndex, highlightIndex)} />
                               </div>
                             ))}
@@ -1077,7 +1151,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                   value={highlight}
                                   onChange={(e) => handleProjectHighlightChange(projIndex, highlightIndex, e.target.value)}
                                   placeholder="Describe what you accomplished with this project"
-                                ></textarea>
+                                />
                                 <DeleteButton onClick={() => removeProjectHighlight(projIndex, highlightIndex)} />
                               </div>
                             ))}
