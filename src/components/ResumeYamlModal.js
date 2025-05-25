@@ -62,13 +62,12 @@ const ResumeDocument = ({ data }) => {
           </>
         )}
 
-        {/* Objective Section - FIXED */}
-        {data.objective && data.objective.trim() && (
-          <>
-            <Text style={styles.sectionTitle}>Objective</Text>
-            <Text style={styles.textNormal}>{data.objective}</Text>
-          </>
-        )}
+            {data.objective && data.objective.trim() && (
+              <>
+                <Text style={styles.sectionTitle}>Objective</Text>
+                <Text style={styles.textNormal}>{data.objective}</Text>
+              </>
+            )}
 
         {/* Experience Section */}
         {data.experiences && data.experiences.length > 0 && (
@@ -162,20 +161,23 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
   const modalRef = useRef(null);
   const [showYamlView, setShowYamlView] = useState(false);
   const [yamlString, setYamlString] = useState('');
+  const [includeObjective, setIncludeObjective] = useState(true);
 
-  useEffect(() => {
-    if (yamlContent) {
-      try {
-        const parsed = yaml.load(yamlContent);
-        console.log('Parsed YAML data:', parsed);
-        console.log('Objective in parsed data:', parsed.objective);
+useEffect(() => {
+  if (yamlContent) {
+    try {
+      const parsed = yaml.load(yamlContent);
+      console.log('Parsed YAML data:', parsed);
+      console.log('Objective in parsed data:', parsed.objective);
 
-        setResumeData(parsed);
-        setYamlString(yamlContent);
-      } catch (err) {
-        console.error("Error parsing YAML:", err);
-      }
+      setResumeData(parsed);
+      setYamlString(yamlContent);
+      // Set objective inclusion based on whether objective exists and has content
+      setIncludeObjective(parsed.objective && parsed.objective.trim() !== '');
+    } catch (err) {
+      console.error("Error parsing YAML:", err);
     }
+  }
 
     const handleEscape = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', handleEscape);
@@ -659,7 +661,8 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
               </button>
               <button
                 onClick={() => setActiveTab("objective")}
-                className={`${
+                className={`$
+                {
                   activeTab === "objective"
                     ? "border-indigo-500 text-indigo-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -828,48 +831,43 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                   {/* NEW: Dedicated Objective Tab */}
                   {activeTab === "objective" && (
                     <div className="space-y-4">
-                      <h4 className="text-lg font-medium text-gray-900">Professional Objective</h4>
+                      <div className="flex justify-between items-center">
+                        <h4 className="text-lg font-medium text-gray-900">Professional Objective</h4>
+                        <div className="flex items-center">
+                          <label className="inline-flex items-center">
+                            <input
+                              type="checkbox"
+                              className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                              checked={includeObjective}
+                              onChange={(e) => {
+                                const shouldInclude = e.target.checked;
+                                setIncludeObjective(shouldInclude);
 
-                      {/* Debug info - remove in production */}
-                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm">
-                        <strong>Debug Info:</strong>
-                        <br />Current objective value: "{resumeData.objective}"
-                        <br />Type: {typeof resumeData.objective}
-                        <br />Is empty: {!resumeData.objective || resumeData.objective.trim() === ''}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Professional Summary/Objective
-                        </label>
-                        <p className="text-sm text-gray-500 mb-3">
-                          Write a brief 2-3 sentence summary of your professional background, key skills, and career goals.
-                          This should be tailored to the specific job you're applying for.
-                        </p>
-                        <textarea
-                          rows={6}
-                          className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full sm:text-sm border border-gray-300 rounded-md"
-                          placeholder="Example: Experienced software engineer with 5+ years in full-stack development seeking to leverage expertise in React and Node.js to contribute to innovative web applications at a fast-growing technology company."
-                          value={resumeData.objective || ""}
-                          onChange={handleObjectiveChange}
-                        />
-                        <div className="mt-2 text-sm text-gray-500">
-                          Characters: {(resumeData.objective || "").length} / 500 (recommended max)
+                                const newData = {
+                                  ...resumeData,
+                                  objective: shouldInclude ? (resumeData.objective || "") : undefined
+                                };
+                                setResumeData(newData);
+                                updateYamlString(newData);
+                              }}
+                            />
+                            <span className="ml-2 text-sm font-medium text-gray-700">Include in resume</span>
+                          </label>
                         </div>
                       </div>
 
                       {/* Tips section */}
-                      <div className="mt-6 p-4 bg-gray-50 rounded-md">
-                        <h5 className="font-medium text-gray-900 mb-2">💡 Tips for a Strong Objective:</h5>
-                        <ul className="text-sm text-gray-700 space-y-1">
-                          <li>• Keep it concise (2-3 sentences)</li>
-                          <li>• Include your years of experience</li>
-                          <li>• Mention 2-3 key skills relevant to the job</li>
-                          <li>• State what type of role you're seeking</li>
-                          <li>• Tailor it to the specific company/position</li>
-                        </ul>
-                      </div>
-                    </div>
+                         <div className="mt-6 p-4 bg-gray-50 rounded-md">
+                              <h5 className="font-medium text-gray-900 mb-2">💡 Tips for a Strong Objective:</h5>
+                              <ul className="text-sm text-gray-700 space-y-1">
+                                <li>• Keep it concise (2-3 sentences)</li>
+                                <li>• Include your years of experience</li>
+                                <li>• Mention 2-3 key skills relevant to the job</li>
+                                <li>• State what type of role you're seeking</li>
+                                <li>• Tailor it to the specific company/position</li>
+                              </ul>
+                            </div>
+                          </div>
                   )}
 
                   {/* Education */}
