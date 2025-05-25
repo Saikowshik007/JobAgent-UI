@@ -855,16 +855,6 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                             </label>
                           </div>
                         </div>
-
-                        {/* Debug info - remove in production */}
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm">
-                          <strong>Debug Info:</strong>
-                          <br />Include objective: {includeObjective.toString()}
-                          <br />Current objective value: "{resumeData.objective}"
-                          <br />Type: {typeof resumeData.objective}
-                          <br />Is empty: {!resumeData.objective || resumeData.objective.trim() === ''}
-                        </div>
-
                         <div className={includeObjective ? '' : 'opacity-50'}>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Professional Summary/Objective
