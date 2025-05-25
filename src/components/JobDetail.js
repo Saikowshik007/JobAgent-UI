@@ -1,3 +1,4 @@
+// JobDetail.js - Fixed version with proper YAML state reset on job change
 import React, { useState, useEffect, useRef  } from 'react';
 import { jobsApi,resumeApi } from '../utils/api';
 import ResumeStatusTracker from './ResumeStatusTracker';
@@ -24,14 +25,34 @@ function JobDetail({ job, onStatusChange }) {
   const yamlFetched = useRef(false);
   const [showSimplifyModal, setShowSimplifyModal] = useState(false);
 
-  // NEW: Clear messages when job changes
+  // Add a ref to track the current job ID
+  const currentJobId = useRef(job.id);
+
+  // NEW: Clear ALL state when job changes - this is the key fix
   useEffect(() => {
-    setResumeError('');
-    setResumeMessage('');
-    setShowStatusTracker(false);
-    setUploadingToSimplify(false);
-    setFetchingYamlForModal(false);
-  }, [job.id]); // Clear when job ID changes
+    // Check if the job has actually changed
+    if (currentJobId.current !== job.id) {
+      console.log(`Job changed from ${currentJobId.current} to ${job.id} - resetting all state`);
+
+      // Reset ALL job-specific state
+      setResumeError('');
+      setResumeMessage('');
+      setShowStatusTracker(false);
+      setUploadingToSimplify(false);
+      setFetchingYamlForModal(false);
+
+      // IMPORTANT: Reset YAML-related state
+      setResumeYaml(null);
+      yamlFetched.current = false;
+      fetchingYaml.current = false;
+
+      // Update the job ID tracker
+      currentJobId.current = job.id;
+
+      // Update resume ID from the new job
+      setResumeId(job.resume_id || null);
+    }
+  }, [job.id]); // Only depend on job.id to detect actual job changes
 
   // Fetch user's resume data when component mounts
   useEffect(() => {
@@ -55,48 +76,50 @@ function JobDetail({ job, onStatusChange }) {
     fetchUserResume();
   }, [currentUser]);
 
-  // Reset YAML fetch tracking when resumeId changes (new resume)
+  // IMPROVED: Fetch YAML when conditions are met, now properly resets per job
   useEffect(() => {
-    if (resumeId !== job.resume_id) {
-      setResumeId(job.resume_id || null);
-      yamlFetched.current = false;
-      setResumeYaml(null);
-    }
-  }, [job.resume_id]);
+    console.log('Checking if should fetch YAML:', {
+      resumeId,
+      status: job.status,
+      hasYaml: !!resumeYaml,
+      yamlFetched: yamlFetched.current,
+      fetching: fetchingYaml.current,
+      jobId: job.id
+    });
 
-  // Only fetch resume YAML once when conditions are met
-  useEffect(() => {
     if (resumeId &&
         job.status === 'RESUME_GENERATED' &&
         !resumeYaml &&
         !yamlFetched.current &&
         !fetchingYaml.current) {
+      console.log('Conditions met - fetching YAML for job', job.id);
       fetchResumeYaml();
     }
-  }, [resumeId, resumeYaml]);
+  }, [resumeId, job.status, resumeYaml, job.id]); // Add job.id as dependency
 
-const fetchResumeYaml = async () => {
-  if (fetchingYaml.current || yamlFetched.current) {
-    return; // Prevent duplicate calls
-  }
-
-  try {
-    fetchingYaml.current = true;
-    console.log('Fetching resume YAML for resumeId:', resumeId);
-
-    const yamlContent = await jobsApi.getResumeYaml(resumeId);
-    if (yamlContent) {
-      setResumeYaml(yamlContent);
-      yamlFetched.current = true; // Mark as fetched
-      console.log('Resume YAML fetched successfully');
+  const fetchResumeYaml = async () => {
+    if (fetchingYaml.current || yamlFetched.current) {
+      console.log('Skipping YAML fetch - already fetching or fetched');
+      return; // Prevent duplicate calls
     }
-  } catch (error) {
-    console.error('Error fetching resume YAML:', error);
-    setResumeError(`Failed to fetch resume YAML: ${error.message}`);
-  } finally {
-    fetchingYaml.current = false;
-  }
-};
+
+    try {
+      fetchingYaml.current = true;
+      console.log('Fetching resume YAML for resumeId:', resumeId, 'jobId:', job.id);
+
+      const yamlContent = await jobsApi.getResumeYaml(resumeId);
+      if (yamlContent) {
+        setResumeYaml(yamlContent);
+        yamlFetched.current = true; // Mark as fetched
+        console.log('Resume YAML fetched successfully for job', job.id);
+      }
+    } catch (error) {
+      console.error('Error fetching resume YAML:', error);
+      setResumeError(`Failed to fetch resume YAML: ${error.message}`);
+    } finally {
+      fetchingYaml.current = false;
+    }
+  };
 
   // New function to handle View/Edit Resume button click
   const handleViewEditResume = async () => {
@@ -150,8 +173,10 @@ const fetchResumeYaml = async () => {
       setResumeError('');
       setResumeMessage('');
       setShowStatusTracker(false);
+
+      // Reset YAML state for new resume generation
       setResumeYaml(null);
-      yamlFetched.current = false; // Reset YAML fetch tracking
+      yamlFetched.current = false;
 
       // Check if we have user resume data
       if (!userResumeData) {
@@ -189,46 +214,46 @@ const fetchResumeYaml = async () => {
     }
   };
 
-const handleUploadToSimplify = () => {
-  setShowSimplifyModal(true);
-};
+  const handleUploadToSimplify = () => {
+    setShowSimplifyModal(true);
+  };
 
-const handleSimplifyUploadComplete = (result) => {
-  setResumeMessage('Resume uploaded to Simplify successfully!');
-  setShowSimplifyModal(false);
-};
+  const handleSimplifyUploadComplete = (result) => {
+    setResumeMessage('Resume uploaded to Simplify successfully!');
+    setShowSimplifyModal(false);
+  };
 
-const handleResumeComplete = async (resumeData) => {
-  setResumeMessage('Resume generated successfully!');
-  setShowStatusTracker(false); // Hide the status tracker to stop polling
+  const handleResumeComplete = async (resumeData) => {
+    setResumeMessage('Resume generated successfully!');
+    setShowStatusTracker(false); // Hide the status tracker to stop polling
 
-  // Only update status if it's not already RESUME_GENERATED
-  if (job.status !== 'RESUME_GENERATED') {
-    onStatusChange(job.id, 'RESUME_GENERATED');
-  }
+    // Only update status if it's not already RESUME_GENERATED
+    if (job.status !== 'RESUME_GENERATED') {
+      onStatusChange(job.id, 'RESUME_GENERATED');
+    }
 
-  // Fetch YAML if we haven't already
-  if (!resumeYaml && !yamlFetched.current) {
-    await fetchResumeYaml();
-  }
-};
+    // Fetch YAML if we haven't already
+    if (!resumeYaml && !yamlFetched.current) {
+      await fetchResumeYaml();
+    }
+  };
 
-const handleSaveYaml = async (yamlContent, parsedData) => {
-  try {
-    setResumeError('');
-    setResumeMessage('Saving resume changes...');
+  const handleSaveYaml = async (yamlContent, parsedData) => {
+    try {
+      setResumeError('');
+      setResumeMessage('Saving resume changes...');
 
-    // Call the API to save the updated YAML content
-    await resumeApi.saveResumeYaml(resumeId, yamlContent);
+      // Call the API to save the updated YAML content
+      await resumeApi.saveResumeYaml(resumeId, yamlContent);
 
-    // Update the local state with the new YAML content
-    setResumeYaml(yamlContent);
-    setResumeMessage('Resume updated successfully!');
-  } catch (error) {
-    console.error('Error saving resume YAML:', error);
-    setResumeError(`Failed to save resume: ${error.message}`);
-  }
-};
+      // Update the local state with the new YAML content
+      setResumeYaml(yamlContent);
+      setResumeMessage('Resume updated successfully!');
+    } catch (error) {
+      console.error('Error saving resume YAML:', error);
+      setResumeError(`Failed to save resume: ${error.message}`);
+    }
+  };
 
   // FIXED: Check if Upload to Simplify should be enabled
   const isUploadToSimplifyEnabled = () => {
