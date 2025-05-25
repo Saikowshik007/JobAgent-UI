@@ -18,11 +18,20 @@ function JobDetail({ job, onStatusChange }) {
   const [resumeYaml, setResumeYaml] = useState(null);
   const [showYamlModal, setShowYamlModal] = useState(false);
   const [expandedDescription, setExpandedDescription] = useState(false);
-  const [fetchingYamlForModal, setFetchingYamlForModal] = useState(false); // New state for modal fetch
+  const [fetchingYamlForModal, setFetchingYamlForModal] = useState(false);
   const { currentUser, getUserSettings } = useAuth();
   const fetchingYaml = useRef(false);
-  const yamlFetched = useRef(false); // Track if we've already fetched YAML for this resume
+  const yamlFetched = useRef(false);
   const [showSimplifyModal, setShowSimplifyModal] = useState(false);
+
+  // NEW: Clear messages when job changes
+  useEffect(() => {
+    setResumeError('');
+    setResumeMessage('');
+    setShowStatusTracker(false);
+    setUploadingToSimplify(false);
+    setFetchingYamlForModal(false);
+  }, [job.id]); // Clear when job ID changes
 
   // Fetch user's resume data when component mounts
   useEffect(() => {
@@ -64,7 +73,7 @@ function JobDetail({ job, onStatusChange }) {
         !fetchingYaml.current) {
       fetchResumeYaml();
     }
-  }, [resumeId, resumeYaml]); // Removed job.status from dependencies
+  }, [resumeId, resumeYaml]);
 
 const fetchResumeYaml = async () => {
   if (fetchingYaml.current || yamlFetched.current) {
@@ -183,11 +192,11 @@ const fetchResumeYaml = async () => {
 const handleUploadToSimplify = () => {
   setShowSimplifyModal(true);
 };
+
 const handleSimplifyUploadComplete = (result) => {
   setResumeMessage('Resume uploaded to Simplify successfully!');
   setShowSimplifyModal(false);
 };
-
 
 const handleResumeComplete = async (resumeData) => {
   setResumeMessage('Resume generated successfully!');
@@ -220,6 +229,13 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
     setResumeError(`Failed to save resume: ${error.message}`);
   }
 };
+
+  // FIXED: Check if Upload to Simplify should be enabled
+  const isUploadToSimplifyEnabled = () => {
+    const currentStatus = job.status;
+    const enabledStatuses = ['RESUME_GENERATED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED', 'DECLINED'];
+    return enabledStatuses.includes(currentStatus) && resumeId;
+  };
 
   // Access job properties safely
   const metadata = job.metadata || {};
@@ -505,7 +521,7 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
         </div>
       )}
 
-      {/* Resume YAML Modal - Updated condition to show modal even if YAML is being fetched */}
+      {/* Resume YAML Modal */}
       {showYamlModal && (
         <ResumeYamlModal
           yamlContent={resumeYaml}
@@ -543,9 +559,9 @@ const handleSaveYaml = async (yamlContent, parsedData) => {
 
              <button
                type="button"
-               className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+               className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                onClick={handleUploadToSimplify}
-               disabled={uploadingToSimplify || job.status !== 'RESUME_GENERATED' || !resumeId}
+               disabled={uploadingToSimplify || !isUploadToSimplifyEnabled()}
              >
                {uploadingToSimplify ? (
                  <>
