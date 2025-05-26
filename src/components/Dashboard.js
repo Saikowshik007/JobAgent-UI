@@ -1,481 +1,421 @@
-
-import React, { useState, useEffect } from 'react';
-import { jobsApi } from '../utils/api';
-import JobDetail from './JobDetail';
-import { useAuth } from '../contexts/AuthContext';
+import { jobsApi, systemApi } from "../utils/api";
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import JobSearch from "./JobSearch";
+import JobList from "./JobList";
+import JobDetail from "./JobDetail";
+import Navbar from "./Navbar";
+import Footer from "./Footer";
 
 function Dashboard() {
   const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [selectedJob, setSelectedJob] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
-  const [sortBy, setSortBy] = useState('date_found');
-  const [sortOrder, setSortOrder] = useState('desc');
-  const [showAddJobForm, setShowAddJobForm] = useState(false);
-  const [addJobUrl, setAddJobUrl] = useState('');
-  const [addingJob, setAddingJob] = useState(false);
-  const [focusedField, setFocusedField] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showJobSearch, setShowJobSearch] = useState(false);
+  const [userSettings, setUserSettings] = useState(null);
+  const [systemStatus, setSystemStatus] = useState(null);
+  const [jobStats, setJobStats] = useState(null);
+  const [selectedJobs, setSelectedJobs] = useState(new Set());
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
 
-  const { currentUser } = useAuth();
+  const { currentUser, getUserSettings } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    fetchJobs();
-  }, []);
+    if (!currentUser) {
+      navigate("/login");
+      return;
+    }
 
-  const fetchJobs = async () => {
-    try {
-      setLoading(true);
-      const response = await jobsApi.getAllJobs();
-      setJobs(response || []);
-      setError('');
-    } catch (err) {
-      setError('Failed to fetch jobs: ' + err.message);
-      setJobs([]);
-    } finally {
-      setLoading(false);
+    async function fetchData() {
+      try {
+        // Fetch user settings from Firebase
+        const settings = await getUserSettings();
+        setUserSettings(settings);
+
+        // Fetch system status
+        const statusData = await systemApi.getStatus();
+        setSystemStatus(statusData);
+
+        // Fetch jobs
+        console.log("Fetching jobs with user ID:", currentUser.uid);
+        const jobsResponse = await jobsApi.getJobs({
+          limit: 100,
+          offset: 0
+        });
+
+        setJobs(jobsResponse.jobs || []);
+
+        // Fetch job statistics
+        try {
+          const statsData = await jobsApi.getJobStats();
+          setJobStats(statsData);
+        } catch (statsError) {
+          console.warn("Failed to fetch job statistics:", statsError);
+        }
+
+      } catch (err) {
+        setError("Failed to fetch data: " + err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (currentUser.uid) {
+      fetchData();
+    } else {
+      setError("User authentication not complete. Please wait or refresh.");
+    }
+  }, [currentUser, navigate, getUserSettings]);
+
+  const handleSearchComplete = (newJobs) => {
+    setJobs(prevJobs => {
+      // Add only jobs that don't already exist in the list
+      const existingJobIds = new Set(prevJobs.map(job => job.id));
+      const uniqueNewJobs = newJobs.filter(job => !existingJobIds.has(job.id));
+      return [...uniqueNewJobs, ...prevJobs];
+    });
+    // Close the job search panel after adding a job
+    setShowJobSearch(false);
+
+    // Refresh job stats
+    refreshJobStats();
+  };
+
+  const handleJobClick = (job) => {
+    if (bulkDeleteMode) {
+      toggleJobSelection(job.id);
+    } else {
+      setSelectedJob(job);
     }
   };
 
   const handleStatusChange = async (jobId, newStatus) => {
     try {
+      // Use the API client to update job status
       await jobsApi.updateJobStatus(jobId, newStatus);
-      setJobs(prevJobs =>
-        prevJobs.map(job =>
-          job.id === jobId ? { ...job, status: newStatus } : job
-        )
-      );
 
-      // Update selected job if it's the one being changed
+      // Update the job status in the UI
+      const updatedJobs = jobs.map(job =>
+        job.id === jobId ? { ...job, status: newStatus } : job
+      );
+      setJobs(updatedJobs);
+
+      // Update the selected job if it's the one being modified
       if (selectedJob && selectedJob.id === jobId) {
-        setSelectedJob(prev => ({ ...prev, status: newStatus }));
+        setSelectedJob({ ...selectedJob, status: newStatus });
       }
-    } catch (err) {
-      setError('Failed to update job status: ' + err.message);
+
+      // Refresh job stats
+      refreshJobStats();
+    } catch (error) {
+      console.error("Failed to update job status:", error);
+      setError(`Failed to update job status: ${error.message}`);
+    }
+  };
+
+  const refreshJobStats = async () => {
+    try {
+      const statsData = await jobsApi.getJobStats();
+      setJobStats(statsData);
+    } catch (error) {
+      console.warn("Failed to refresh job statistics:", error);
+    }
+  };
+
+  const toggleJobSelection = (jobId) => {
+    setSelectedJobs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(jobId)) {
+        newSet.delete(jobId);
+      } else {
+        newSet.add(jobId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedJobs.size === 0) return;
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete ${selectedJobs.size} job(s)? This action cannot be undone.`
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      const jobIds = Array.from(selectedJobs);
+      await jobsApi.deleteJobsBatch(jobIds, false); // Don't cascade delete resumes by default
+
+      // Remove deleted jobs from the UI
+      const remainingJobs = jobs.filter(job => !selectedJobs.has(job.id));
+      setJobs(remainingJobs);
+
+      // Clear selection and exit bulk mode
+      setSelectedJobs(new Set());
+      setBulkDeleteMode(false);
+
+      // Clear selected job if it was deleted
+      if (selectedJob && selectedJobs.has(selectedJob.id)) {
+        setSelectedJob(null);
+      }
+
+      // Refresh stats
+      refreshJobStats();
+
+    } catch (error) {
+      console.error("Failed to delete jobs:", error);
+      setError(`Failed to delete jobs: ${error.message}`);
     }
   };
 
   const handleDeleteJob = async (jobId) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this job? This action cannot be undone."
+    );
+
+    if (!confirmDelete) return;
+
     try {
-      await jobsApi.deleteJob(jobId);
-      setJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
+      await jobsApi.deleteJob(jobId, false); // Don't cascade delete resumes by default
+
+      // Remove job from the UI
+      const remainingJobs = jobs.filter(job => job.id !== jobId);
+      setJobs(remainingJobs);
 
       // Clear selected job if it was deleted
       if (selectedJob && selectedJob.id === jobId) {
         setSelectedJob(null);
       }
-    } catch (err) {
-      setError('Failed to delete job: ' + err.message);
+
+      // Refresh stats
+      refreshJobStats();
+
+    } catch (error) {
+      console.error("Failed to delete job:", error);
+      setError(`Failed to delete job: ${error.message}`);
     }
   };
 
-  const handleAddJob = async (e) => {
-    e?.preventDefault?.();
-    if (!addJobUrl.trim()) return;
-
-    try {
-      setAddingJob(true);
-      setError('');
-
-      const newJob = await jobsApi.addJob({ job_url: addJobUrl.trim() });
-      setJobs(prevJobs => [newJob, ...prevJobs]);
-      setAddJobUrl('');
-      setShowAddJobForm(false);
-    } catch (err) {
-      setError('Failed to add job: ' + err.message);
-    } finally {
-      setAddingJob(false);
-    }
-  };
-
-  // Filter and sort jobs
-  const filteredAndSortedJobs = jobs
-    .filter(job => {
-      const matchesSearch = !searchTerm ||
-        (job.title && job.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (job.company && job.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (job.metadata?.job_title && job.metadata.job_title.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (job.metadata?.company && job.metadata.company.toLowerCase().includes(searchTerm.toLowerCase()));
-
-      const matchesStatus = statusFilter === 'ALL' || job.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    })
-    .sort((a, b) => {
-      let aValue = a[sortBy];
-      let bValue = b[sortBy];
-
-      // Handle nested properties
-      if (sortBy === 'title') {
-        aValue = a.title || a.metadata?.job_title || '';
-        bValue = b.title || b.metadata?.job_title || '';
-      } else if (sortBy === 'company') {
-        aValue = a.company || a.metadata?.company || '';
-        bValue = b.company || b.metadata?.company || '';
-      }
-
-      // Handle dates
-      if (sortBy === 'date_found' || sortBy === 'applied_date') {
-        aValue = aValue ? new Date(aValue) : new Date(0);
-        bValue = bValue ? new Date(bValue) : new Date(0);
-      }
-
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
-    });
-
-  const statusOptions = [
-    { value: 'ALL', label: 'All Status', count: jobs.length },
-    { value: 'NEW', label: 'New', count: jobs.filter(j => j.status === 'NEW').length },
-    { value: 'INTERESTED', label: 'Interested', count: jobs.filter(j => j.status === 'INTERESTED').length },
-    { value: 'RESUME_GENERATED', label: 'Resume Generated', count: jobs.filter(j => j.status === 'RESUME_GENERATED').length },
-    { value: 'APPLIED', label: 'Applied', count: jobs.filter(j => j.status === 'APPLIED').length },
-    { value: 'INTERVIEW', label: 'Interviewing', count: jobs.filter(j => j.status === 'INTERVIEW').length },
-    { value: 'OFFER', label: 'Offer', count: jobs.filter(j => j.status === 'OFFER').length },
-    { value: 'REJECTED', label: 'Rejected', count: jobs.filter(j => j.status === 'REJECTED').length },
-    { value: 'DECLINED', label: 'Declined', count: jobs.filter(j => j.status === 'DECLINED').length },
-  ];
-
-  const getStatusColors = (status) => {
-    switch (status) {
-      case "NEW": return { bg: "bg-gray-100", text: "text-gray-800", dot: "bg-gray-400" };
-      case "INTERESTED": return { bg: "bg-blue-100", text: "text-blue-800", dot: "bg-blue-400" };
-      case "RESUME_GENERATED": return { bg: "bg-purple-100", text: "text-purple-800", dot: "bg-purple-400" };
-      case "APPLIED": return { bg: "bg-yellow-100", text: "text-yellow-800", dot: "bg-yellow-400" };
-      case "INTERVIEW": return { bg: "bg-indigo-100", text: "text-indigo-800", dot: "bg-indigo-400" };
-      case "OFFER": return { bg: "bg-green-100", text: "text-green-800", dot: "bg-green-400" };
-      case "REJECTED": return { bg: "bg-red-100", text: "text-red-800", dot: "bg-red-400" };
-      case "DECLINED": return { bg: "bg-orange-100", text: "text-orange-800", dot: "bg-orange-400" };
-      default: return { bg: "bg-gray-100", text: "text-gray-800", dot: "bg-gray-400" };
-    }
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString();
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your job dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-      <div className="absolute top-0 left-0 w-96 h-96 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-      <div className="absolute top-0 right-0 w-96 h-96 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
-      <div className="absolute -bottom-8 left-20 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      <Navbar />
 
-      <div className="relative container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8 animate-slide-down">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                Job Dashboard
-              </h1>
-              <p className="text-gray-600 mt-2">
-                Welcome back, {currentUser?.email}! You have {jobs.length} jobs tracked.
+      <main className="container mx-auto py-6 px-4 sm:px-6 lg:px-8 flex-grow">
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 mb-4 rounded" role="alert">
+            <div className="flex justify-between items-center">
+              <span className="block sm:inline">{error}</span>
+              <button
+                className="font-bold ml-4"
+                onClick={() => setError("")}
+              >
+                &times;
+              </button>
+            </div>
+          </div>
+        )}
+
+        {systemStatus && systemStatus.status !== "online" && (
+          <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 mb-4 rounded" role="alert">
+            <span className="font-bold">System Status: </span>
+            <span className="block sm:inline">{systemStatus.message || "The system is experiencing issues."}</span>
+          </div>
+        )}
+
+        {/* Job Statistics Dashboard */}
+        {jobStats && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-500">Total Jobs</p>
+                  <p className="text-2xl font-semibold text-gray-900">{jobStats.total_jobs || 0}</p>
+                </div>
+                <div className="p-3 bg-blue-100 rounded-full">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2-2v2m8 0V6a2 2 0 012 2v6a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2V6" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-500">Applied</p>
+                  <p className="text-2xl font-semibold text-gray-900">{jobStats.status_counts?.APPLIED || 0}</p>
+                </div>
+                <div className="p-3 bg-green-100 rounded-full">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-500">Interview</p>
+                  <p className="text-2xl font-semibold text-gray-900">{jobStats.status_counts?.INTERVIEW || 0}</p>
+                </div>
+                <div className="p-3 bg-purple-100 rounded-full">
+                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-500">Resumes Generated</p>
+                  <p className="text-2xl font-semibold text-gray-900">{jobStats.resumes_generated || 0}</p>
+                </div>
+                <div className="p-3 bg-indigo-100 rounded-full">
+                  <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Main Action Bar */}
+        <div className="bg-white rounded-lg shadow mb-6 p-4">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <h1 className="text-xl font-bold text-gray-900">Job Applications</h1>
+
+            <div className="flex flex-wrap gap-2">
+              {/* Bulk actions */}
+              {jobs.length > 0 && (
+                <>
+                  <button
+                    onClick={() => {
+                      setBulkDeleteMode(!bulkDeleteMode);
+                      setSelectedJobs(new Set());
+                    }}
+                    className={`px-3 py-2 text-sm font-medium rounded-md shadow-sm ${
+                      bulkDeleteMode
+                        ? 'bg-red-600 text-white hover:bg-red-700'
+                        : 'bg-gray-600 text-white hover:bg-gray-700'
+                    }`}
+                  >
+                    {bulkDeleteMode ? "Cancel Bulk Delete" : "Bulk Delete"}
+                  </button>
+
+                  {bulkDeleteMode && selectedJobs.size > 0 && (
+                    <button
+                      onClick={handleBulkDelete}
+                      className="px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm"
+                    >
+                      Delete Selected ({selectedJobs.size})
+                    </button>
+                  )}
+                </>
+              )}
+
+              {/* Cache management */}
+              <button
+                onClick={systemApi.clearCache}
+                className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md shadow-sm"
+              >
+                Clear Cache
+              </button>
+
+              {/* Add job button */}
+              <button
+                onClick={() => setShowJobSearch(!showJobSearch)}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm"
+              >
+                {showJobSearch ? "Close Job Form" : "Add New Job"}
+              </button>
+            </div>
+          </div>
+
+          {/* Bulk delete instructions */}
+          {bulkDeleteMode && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-sm text-yellow-700">
+                <strong>Bulk Delete Mode:</strong> Click on jobs to select them for deletion.
+                Selected jobs will be highlighted. Click "Delete Selected" when ready.
               </p>
             </div>
-
-            <button
-              onClick={() => setShowAddJobForm(!showAddJobForm)}
-              className="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-xl shadow-lg hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              <span>Add Job</span>
-            </button>
-          </div>
+          )}
         </div>
 
-        {/* Add Job Form */}
-        {showAddJobForm && (
-          <div className="mb-8 animate-slide-down">
-            <div className="bg-white/80 backdrop-blur-lg shadow-xl rounded-2xl p-6 border border-white/20">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Add New Job</h3>
-              <form onSubmit={handleAddJob} className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-grow">
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg className={`h-5 w-5 transition-colors duration-200 ${focusedField === 'jobUrl' ? 'text-indigo-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                      </svg>
-                    </div>
-                    <input
-                      type="url"
-                      value={addJobUrl}
-                      onChange={(e) => setAddJobUrl(e.target.value)}
-                      onFocus={() => setFocusedField('jobUrl')}
-                      onBlur={() => setFocusedField(null)}
-                      placeholder="Paste job URL here (LinkedIn, Indeed, etc.)"
-                      className={`
-                        block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl
-                        focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200
-                        ${focusedField === 'jobUrl' ? 'transform scale-105 shadow-lg' : 'hover:shadow-md'}
-                      `}
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    disabled={addingJob}
-                    className={`
-                      inline-flex items-center space-x-2 px-6 py-3 border border-transparent
-                      text-sm font-medium rounded-xl shadow-sm text-white transition-all duration-200
-                      transform hover:scale-105
-                      ${addingJob
-                        ? 'bg-indigo-400 cursor-not-allowed animate-pulse'
-                        : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
-                      }
-                    `}
-                  >
-                    {addingJob ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                        <span>Adding...</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        <span>Add Job</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddJobForm(false)}
-                    className="px-4 py-3 text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors duration-200"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
+        {/* Job Search Panel (collapsible) */}
+        {showJobSearch && (
+          <div className="bg-white rounded-lg shadow mb-6 p-6">
+            <JobSearch
+              onSearchComplete={handleSearchComplete}
+              userSettings={userSettings}
+              userId={currentUser.uid}
+            />
           </div>
         )}
-
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 animate-slide-down">
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center space-x-3">
-              <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-red-800">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Filters and Search */}
-        <div className="mb-8 animate-slide-in">
-          <div className="bg-white/80 backdrop-blur-lg shadow-xl rounded-2xl p-6 border border-white/20">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Search */}
-              <div className="lg:col-span-2">
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search jobs by title or company..."
-                    className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-md focus:shadow-lg"
-                  />
-                </div>
-              </div>
-
-              {/* Status Filter */}
-              <div>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="block w-full px-3 py-3 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-md focus:shadow-lg"
-                >
-                  {statusOptions.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label} ({option.count})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Sort Options */}
-              <div>
-                <select
-                  value={`${sortBy}-${sortOrder}`}
-                  onChange={(e) => {
-                    const [field, order] = e.target.value.split('-');
-                    setSortBy(field);
-                    setSortOrder(order);
-                  }}
-                  className="block w-full px-3 py-3 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-md focus:shadow-lg"
-                >
-                  <option value="date_found-desc">Newest First</option>
-                  <option value="date_found-asc">Oldest First</option>
-                  <option value="title-asc">Title A-Z</option>
-                  <option value="title-desc">Title Z-A</option>
-                  <option value="company-asc">Company A-Z</option>
-                  <option value="company-desc">Company Z-A</option>
-                  <option value="status-asc">Status A-Z</option>
-                  <option value="status-desc">Status Z-A</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Main Content Area */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Jobs List */}
-          <div className="lg:col-span-1">
-            <div className="bg-white/80 backdrop-blur-lg shadow-xl rounded-2xl border border-white/20 overflow-hidden">
-              <div className="p-6 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Jobs ({filteredAndSortedJobs.length})
-                </h2>
-              </div>
-
-              <div className="max-h-[70vh] overflow-y-auto">
-                {loading ? (
-                  <div className="p-8 text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading jobs...</p>
-                  </div>
-                ) : filteredAndSortedJobs.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <svg className="h-12 w-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m8 0H8m8 0v2a2 2 0 01-2 2H10a2 2 0 01-2-2V8m8 0V6a2 2 0 00-2-2H10a2 2 0 00-2 2v2" />
-                    </svg>
-                    <p className="text-gray-600">No jobs found</p>
-                    <p className="text-gray-500 text-sm mt-1">Try adjusting your filters or add some jobs</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-200">
-                    {filteredAndSortedJobs.map((job, index) => {
-                      const title = job.title || job.metadata?.job_title || "Untitled Position";
-                      const company = job.company || job.metadata?.company || "Unknown Company";
-                      const statusColors = getStatusColors(job.status);
-                      const isSelected = selectedJob && selectedJob.id === job.id;
-
-                      return (
-                        <div
-                          key={job.id}
-                          onClick={() => setSelectedJob(job)}
-                          className={`
-                            p-4 cursor-pointer transition-all duration-200 hover:bg-gray-50 animate-slide-in
-                            ${isSelected ? 'bg-indigo-50 border-r-4 border-indigo-500' : ''}
-                          `}
-                          style={{ animationDelay: `${index * 0.1}s` }}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-grow min-w-0">
-                              <h3 className="text-sm font-semibold text-gray-900 truncate">
-                                {title}
-                              </h3>
-                              <p className="text-sm text-gray-600 truncate mt-1">
-                                {company}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                {formatDate(job.date_found)}
-                              </p>
-                            </div>
-                            <div className="ml-2 flex-shrink-0">
-                              <span className={`
-                                inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                ${statusColors.bg} ${statusColors.text}
-                              `}>
-                                <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${statusColors.dot}`}></div>
-                                {job.status || 'NEW'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Job List Column */}
+          <div className="w-full lg:w-1/2">
+            <JobList
+              jobs={jobs}
+              userId={currentUser.uid}
+              selectedJob={selectedJob}
+              onJobClick={handleJobClick}
+              bulkDeleteMode={bulkDeleteMode}
+              selectedJobs={selectedJobs}
+              onDeleteJob={handleDeleteJob}
+            />
           </div>
 
-          {/* Job Detail */}
-          <div className="lg:col-span-2">
+          {/* Job Detail Column */}
+          <div className="w-full lg:w-1/2">
             {selectedJob ? (
-              <div className="animate-slide-in">
-                <JobDetail
-                  job={selectedJob}
-                  onStatusChange={handleStatusChange}
-                  onDeleteJob={handleDeleteJob}
-                />
-              </div>
+              <JobDetail
+                job={selectedJob}
+                onStatusChange={handleStatusChange}
+                userId={currentUser.uid}
+                onDeleteJob={handleDeleteJob}
+              />
             ) : (
-              <div className="bg-white/80 backdrop-blur-lg shadow-xl rounded-2xl border border-white/20 p-12 text-center animate-slide-in">
-                <svg className="h-24 w-24 text-gray-300 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m8 0H8m8 0v2a2 2 0 01-2 2H10a2 2 0 01-2-2V8m8 0V6a2 2 0 00-2-2H10a2 2 0 00-2 2v2" />
-                </svg>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Select a Job</h3>
-                <p className="text-gray-600">Choose a job from the list to view details and manage your application</p>
+              <div className="bg-white shadow rounded-lg p-6 flex items-center justify-center min-h-[200px]">
+                <div className="text-center">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2-2v2m8 0V6a2 2 0 012 2v6a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2V6" />
+                  </svg>
+                  <p className="mt-2 text-gray-500">
+                    {bulkDeleteMode
+                      ? "Select jobs from the list to delete them"
+                      : "Select a job to view details"
+                    }
+                  </p>
+                </div>
               </div>
             )}
           </div>
         </div>
-      </div>
+      </main>
 
-      <style jsx>{`
-        @keyframes blob {
-          0% { transform: translate(0px, 0px) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
-          100% { transform: translate(0px, 0px) scale(1); }
-        }
-
-        @keyframes slide-down {
-          from { opacity: 0; transform: translateY(-20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes slide-in {
-          from { opacity: 0; transform: translateX(20px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-
-        .animate-slide-down {
-          animation: slide-down 0.4s ease-out;
-        }
-
-        .animate-slide-in {
-          animation: slide-in 0.5s ease-out;
-        }
-
-        .bg-grid-pattern {
-          background-image: radial-gradient(circle, #000 1px, transparent 1px);
-          background-size: 20px 20px;
-        }
-      `}</style>
+      <Footer />
     </div>
   );
 }
