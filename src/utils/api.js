@@ -252,7 +252,7 @@ export const jobsApi = {
     return this.analyzeJob(jobUrl, null, apiKey);
   },
 
-  // Legacy methods for compatibility
+    // Legacy methods for compatibility
   getSystemStatus: () => systemApi.getStatus(),
   generateResume: (jobId, settings, customize = true, template = "standard") => {
     return resumeApi.generateResume(jobId, settings, customize, template);
