@@ -1,4 +1,4 @@
-// src/components/ResumeStatusTracker.js - Updated to use new API endpoints
+// src/components/ResumeStatusTracker.js - Fixed to not fetch YAML prematurely
 import React, { useState, useEffect, useRef } from 'react';
 import { resumeApi } from '../utils/api';
 
@@ -20,7 +20,7 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
     // Reset mounted flag when component mounts
     isMounted.current = true;
 
-    // Status polling function
+    // Status polling function - ONLY checks status, doesn't fetch YAML
     const checkStatus = async () => {
       try {
         if (!isMounted.current) return;
@@ -49,9 +49,12 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
             intervalRefs.current.progress = null;
           }
 
-          // Notify parent component
+          // Notify parent component - DON'T pass YAML data, just completion status
           if (onComplete && isMounted.current) {
-            onComplete(response);
+            onComplete({
+              ...response,
+              resumeId: resumeId
+            });
           }
         } else if (response.status === 'error' || response.status === 'failed') {
           setStatus('error');
@@ -89,6 +92,15 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
         if (!isMounted.current) return;
 
         console.error('Error checking resume status:', error);
+
+        // Don't treat 404 as a fatal error during generation - resume might not exist yet
+        if (error.message?.includes('404') || error.message?.includes('not found')) {
+          console.log('Resume not found yet (404) - this is normal during generation');
+          setMessage('Resume generation in progress...');
+          setProgress(prev => Math.min(prev + 2, 85));
+          return; // Don't set error state, just continue polling
+        }
+
         setStatus('error');
         setError(`Failed to check resume status: ${error.message}`);
 
@@ -143,7 +155,7 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
         intervalRefs.current.progress = null;
       }
     };
-  }, [resumeId, onComplete]);
+  }, [resumeId]); // Removed onComplete from dependencies to prevent unnecessary re-renders
 
   // Additional cleanup on unmount
   useEffect(() => {

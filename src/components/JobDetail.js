@@ -82,7 +82,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
     fetchUserResume();
   }, [currentUser]);
 
-  // Fetch YAML when conditions are met
+  // Fetch YAML only when resume is actually completed (not during generation)
   useEffect(() => {
     console.log('Checking if should fetch YAML:', {
       resumeId,
@@ -90,18 +90,27 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
       hasYaml: !!resumeYaml,
       yamlFetched: yamlFetched.current,
       fetching: fetchingYaml.current,
+      showStatusTracker,
       jobId: job.id
     });
 
+    // Only fetch YAML if:
+    // 1. We have a resumeId
+    // 2. Job status is RESUME_GENERATED
+    // 3. We don't already have YAML
+    // 4. We haven't already fetched it
+    // 5. We're not currently fetching it
+    // 6. Status tracker is NOT showing (meaning generation is complete)
     if (resumeId &&
         job.status === 'RESUME_GENERATED' &&
         !resumeYaml &&
         !yamlFetched.current &&
-        !fetchingYaml.current) {
-      console.log('Conditions met - fetching YAML for job', job.id);
+        !fetchingYaml.current &&
+        !showStatusTracker) {
+      console.log('Conditions met - fetching YAML for completed job', job.id);
       fetchResumeYaml();
     }
-  }, [resumeId, job.status, resumeYaml, job.id]);
+  }, [resumeId, job.status, resumeYaml, showStatusTracker, job.id]);
 
   const fetchResumeYaml = async () => {
     if (fetchingYaml.current || yamlFetched.current) {
@@ -222,6 +231,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
   };
 
   const handleResumeComplete = async (resumeData) => {
+    console.log('Resume generation completed:', resumeData);
     setResumeMessage('Resume generated successfully!');
     setShowStatusTracker(false);
 
@@ -229,9 +239,14 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
       onStatusChange(job.id, 'RESUME_GENERATED');
     }
 
-    if (!resumeYaml && !yamlFetched.current) {
-      await fetchResumeYaml();
-    }
+    // Now that generation is complete, we can fetch the YAML
+    // Give it a moment for the backend to finish writing the file
+    setTimeout(() => {
+      if (!resumeYaml && !yamlFetched.current) {
+        console.log('Resume completed - fetching YAML after brief delay');
+        fetchResumeYaml();
+      }
+    }, 1000); // 1 second delay to ensure file is ready
   };
 
   const handleSaveYaml = async (yamlContent, parsedData) => {
