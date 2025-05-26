@@ -1,4 +1,4 @@
-// JobDetail.js - Fixed version with proper YAML state reset on job change
+// JobDetail.js - Fixed version with complete state reset on job change
 import React, { useState, useEffect, useRef } from 'react';
 import { jobsApi, resumeApi } from '../utils/api';
 import ResumeStatusTracker from './ResumeStatusTracker';
@@ -21,26 +21,34 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [fetchingYamlForModal, setFetchingYamlForModal] = useState(false);
   const [showSimplifyModal, setShowSimplifyModal] = useState(false);
+  const [resumeYamlVersion, setResumeYamlVersion] = useState(0); // Track YAML changes
 
   const { currentUser, getUserSettings } = useAuth();
   const fetchingYaml = useRef(false);
   const yamlFetched = useRef(false);
   const currentJobId = useRef(job.id);
 
-  // Clear ALL state when job changes - this is the key fix
+  // COMPLETE state reset when job changes - this is the key fix
   useEffect(() => {
     if (currentJobId.current !== job.id) {
-      console.log(`Job changed from ${currentJobId.current} to ${job.id} - resetting all state`);
+      console.log(`Job changed from ${currentJobId.current} to ${job.id} - resetting ALL state`);
 
-      // Reset ALL job-specific state
+      // Reset ALL job-specific state completely
+      setGeneratingResume(false);
       setResumeError('');
       setResumeMessage('');
-      setShowStatusTracker(false);
       setUploadingToSimplify(false);
+      setShowStatusTracker(false);
       setFetchingYamlForModal(false);
+      setExpandedDescription(false);
 
-      // Reset YAML-related state
+      // Reset modal states
+      setShowYamlModal(false);
+      setShowSimplifyModal(false);
+
+      // Reset YAML-related state completely
       setResumeYaml(null);
+      setResumeYamlVersion(0);
       yamlFetched.current = false;
       fetchingYaml.current = false;
 
@@ -108,6 +116,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
       const yamlContent = await resumeApi.getResumeYaml(resumeId);
       if (yamlContent) {
         setResumeYaml(yamlContent);
+        setResumeYamlVersion(prev => prev + 1); // Increment version when YAML is fetched
         yamlFetched.current = true;
         console.log('Resume YAML fetched successfully for job', job.id);
       }
@@ -135,6 +144,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
         const yamlContent = await resumeApi.getResumeYaml(resumeId);
         if (yamlContent) {
           setResumeYaml(yamlContent);
+          setResumeYamlVersion(prev => prev + 1); // Increment version
           yamlFetched.current = true;
           setShowYamlModal(true);
           console.log('Resume YAML fetched successfully for modal');
@@ -171,6 +181,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
 
       // Reset YAML state for new resume generation
       setResumeYaml(null);
+      setResumeYamlVersion(0);
       yamlFetched.current = false;
 
       if (!userResumeData) {
@@ -230,6 +241,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
 
       await resumeApi.updateResumeYaml(resumeId, yamlContent);
       setResumeYaml(yamlContent);
+      setResumeYamlVersion(prev => prev + 1); // Increment version when YAML is updated
       setResumeMessage('Resume updated successfully!');
     } catch (error) {
       console.error('Error saving resume YAML:', error);
@@ -509,6 +521,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
           onClose={() => setShowSimplifyModal(false)}
           resumeId={resumeId}
           jobId={job.id}
+          resumeYamlVersion={resumeYamlVersion} // Pass version to force refresh
           onUploadComplete={handleSimplifyUploadComplete}
         />
       )}

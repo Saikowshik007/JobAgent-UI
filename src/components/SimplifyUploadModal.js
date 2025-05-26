@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { simplifyApi, jobsApi } from '../utils/api';
+import { simplifyApi, resumeApi } from '../utils/api';
 import { pdf } from '@react-pdf/renderer';
 import { Document, Page, Text, View, StyleSheet, Font, Link } from '@react-pdf/renderer';
 import yaml from 'js-yaml';
@@ -59,7 +59,7 @@ const ResumeDocument = ({ data }) => (
         </>
       )}
 
-      {data.objective && (
+      {data.objective && data.objective.trim() && (
         <>
           <Text style={styles.sectionTitle}>Objective</Text>
           <Text style={styles.textNormal}>{data.objective}</Text>
@@ -131,7 +131,7 @@ const ResumeDocument = ({ data }) => (
   </Document>
 );
 
-const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplete }) => {
+const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, resumeYamlVersion = 0, onUploadComplete }) => {
   const [status, setStatus] = useState('checking'); // checking, need-auth, ready, uploading, success, error
   const [error, setError] = useState('');
   const [resumeData, setResumeData] = useState(null);
@@ -139,9 +139,10 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
   const [sessionStatus, setSessionStatus] = useState(null);
   const [csrfToken, setCsrfToken] = useState('');
   const [authToken, setAuthToken] = useState('');
+  const [lastResumeYamlVersion, setLastResumeYamlVersion] = useState(-1);
   const { currentUser } = useAuth();
 
-  // Auto-check session and load resume data when modal opens
+  // Auto-check session and load resume data when modal opens or when resume version changes
   useEffect(() => {
     if (isOpen) {
       setStatus('checking');
@@ -152,6 +153,16 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     }
   }, [isOpen, resumeId]);
 
+  // CRITICAL FIX: Reload resume data when resumeYamlVersion changes (indicating the YAML was updated)
+  useEffect(() => {
+    if (isOpen && resumeYamlVersion !== lastResumeYamlVersion && resumeYamlVersion > 0) {
+      console.log(`🔄 Resume YAML version changed from ${lastResumeYamlVersion} to ${resumeYamlVersion} - reloading fresh data`);
+      setLastResumeYamlVersion(resumeYamlVersion);
+      // Force reload the resume data with fresh content
+      fetchResumeData(true); // true = force refresh
+    }
+  }, [resumeYamlVersion, isOpen, lastResumeYamlVersion]);
+
   const checkSessionAndLoadData = async () => {
     try {
       console.log('🔍 Checking session and loading resume data...');
@@ -160,8 +171,8 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
       const sessionCheck = await simplifyApi.checkSession();
       setSessionStatus(sessionCheck);
 
-      // Load resume data if we haven't already
-      if (!resumeData && resumeId) {
+      // Load resume data if we haven't already or if it needs refresh
+      if (resumeId) {
         await fetchResumeData();
       }
 
@@ -183,15 +194,20 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     }
   };
 
-  const fetchResumeData = async () => {
+  const fetchResumeData = async (forceRefresh = false) => {
     try {
+      if (!forceRefresh && resumeData) {
+        console.log('📄 Resume data already loaded, skipping fetch');
+        return;
+      }
+
       console.log('📄 Loading resume YAML for PDF generation...');
-      const yamlContent = await jobsApi.getResumeYaml(resumeId);
+      const yamlContent = await resumeApi.getResumeYaml(resumeId);
 
       if (yamlContent) {
         const parsed = yaml.load(yamlContent);
         setResumeData(parsed);
-        console.log('✅ Resume data loaded successfully');
+        console.log('✅ Resume data loaded successfully', forceRefresh ? '(forced refresh)' : '');
       }
     } catch (err) {
       console.error('❌ Failed to fetch resume data:', err);
@@ -247,7 +263,11 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
     try {
       console.log('🚀 Starting upload via backend...');
 
-      // Generate PDF
+      // CRITICAL: Always fetch fresh resume data before generating PDF
+      console.log('🔄 Fetching fresh resume data before upload...');
+      await fetchResumeData(true); // Force refresh to get latest changes
+
+      // Generate PDF with the fresh data
       const pdfBlob = await generatePdfBlob();
 
       console.log('📤 Uploading via backend proxy...');
@@ -289,6 +309,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
             </svg>
           </button>
         </div>
+
         {/* Checking Status */}
         {status === 'checking' && (
           <div className="text-center py-8">
@@ -395,7 +416,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <h4 className="font-medium text-green-800 mb-2">✅ Ready to Upload</h4>
               <p className="text-sm text-green-700">
-                Authentication confirmed! Your resume will be generated and uploaded via our secure backend.
+                Authentication confirmed! Your resume will be generated with the latest changes and uploaded via our secure backend.
               </p>
             </div>
 
@@ -404,6 +425,9 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
               <p className="text-sm text-gray-600">Resume: {resumeData?.basic?.name || 'Unnamed'}</p>
               <p className="text-sm text-gray-600">Job ID: {jobId}</p>
               <p className="text-sm text-gray-600">Upload Method: Secure Backend Proxy</p>
+              {resumeYamlVersion > 0 && (
+                <p className="text-sm text-green-600">✓ Will use latest resume changes (v{resumeYamlVersion})</p>
+              )}
             </div>
 
             <button
@@ -411,7 +435,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
               disabled={!resumeData}
               className="w-full py-3 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
             >
-              {!resumeData ? 'Loading Resume Data...' : 'Generate PDF & Upload to Simplify'}
+              {!resumeData ? 'Loading Resume Data...' : 'Generate Fresh PDF & Upload to Simplify'}
             </button>
 
             <button
@@ -428,7 +452,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
           <div className="text-center py-8">
             <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
             <p className="text-gray-600 mb-2">
-              {generatingPdf ? 'Generating PDF...' : 'Uploading via secure backend...'}
+              {generatingPdf ? 'Generating PDF with latest changes...' : 'Uploading via secure backend...'}
             </p>
             <p className="text-xs text-gray-500">This may take a few moments</p>
           </div>
@@ -443,7 +467,7 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, onUploadComplet
               </svg>
             </div>
             <h4 className="text-lg font-medium text-gray-900 mb-2">Upload Successful! 🎉</h4>
-            <p className="text-gray-600">Your resume has been uploaded to Simplify Jobs via our secure backend.</p>
+            <p className="text-gray-600">Your resume with the latest changes has been uploaded to Simplify Jobs via our secure backend.</p>
           </div>
         )}
 
