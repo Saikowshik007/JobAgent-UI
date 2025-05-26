@@ -1,463 +1,479 @@
-// Enhanced Dashboard.js with beautiful animations and effects
-import React, { useState, useEffect } from "react";
-import { 
-  Briefcase, Building2, Users, Trophy, FileText, Plus, Trash2, 
-  RefreshCw, Settings, TrendingUp, Target, CheckCircle, 
-  BarChart3, PieChart, Activity, Zap, AlertTriangle
-} from "lucide-react";
 
-// Mock components for demo - replace with your actual imports
-const JobSearch = ({ onSearchComplete, userSettings, userId }) => (
-  <div className="p-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-200">
-    <h3 className="text-lg font-semibold text-indigo-900 mb-2">Job Search Component</h3>
-    <p className="text-indigo-700">Enhanced JobSearch component would be rendered here</p>
-  </div>
-);
-
-const JobList = ({ jobs, selectedJob, onJobClick, bulkDeleteMode, selectedJobs, onDeleteJob }) => (
-  <div className="p-6 bg-white rounded-xl shadow-lg border border-gray-100">
-    <h3 className="text-lg font-semibold text-gray-900 mb-2">Job List Component</h3>
-    <p className="text-gray-600">Enhanced JobList component would be rendered here</p>
-  </div>
-);
-
-const JobDetail = ({ job, onStatusChange, userId, onDeleteJob }) => (
-  <div className="p-6 bg-white rounded-xl shadow-lg border border-gray-100">
-    <h3 className="text-lg font-semibold text-gray-900 mb-2">Job Detail Component</h3>
-    <p className="text-gray-600">Enhanced JobDetail component would be rendered here</p>
-  </div>
-);
+import React, { useState, useEffect } from 'react';
+import { jobsApi } from '../utils/api';
+import JobDetail from './JobDetail';
+import { useAuth } from '../contexts/AuthContext';
 
 function Dashboard() {
   const [jobs, setJobs] = useState([]);
-  const [selectedJob, setSelectedJob] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [showJobSearch, setShowJobSearch] = useState(false);
-  const [userSettings, setUserSettings] = useState({ openaiApiKey: "test-key" });
-  const [systemStatus, setSystemStatus] = useState({ status: "online" });
-  const [jobStats, setJobStats] = useState({
-    total_jobs: 24,
-    status_counts: {
-      APPLIED: 8,
-      INTERVIEW: 3,
-      OFFER: 1,
-      NEW: 12
-    },
-    resumes_generated: 15
-  });
-  const [selectedJobs, setSelectedJobs] = useState(new Set());
-  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
-  const [statusChangeAnimation, setStatusChangeAnimation] = useState(null);
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [sortBy, setSortBy] = useState('date_found');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [showAddJobForm, setShowAddJobForm] = useState(false);
+  const [addJobUrl, setAddJobUrl] = useState('');
+  const [addingJob, setAddingJob] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
 
-  // Mock user data
-  const currentUser = { uid: "user-123" };
+  const { currentUser } = useAuth();
 
-  // Simulate loading
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1500);
-    return () => clearTimeout(timer);
+    fetchJobs();
   }, []);
 
-  const handleSearchComplete = (newJobs) => {
-    setJobs(prevJobs => [...newJobs, ...prevJobs]);
-    setShowJobSearch(false);
-    
-    // Show success animation
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
-
-  const handleJobClick = (job) => {
-    if (bulkDeleteMode) {
-      toggleJobSelection(job.id);
-    } else {
-      setSelectedJob(job);
+  const fetchJobs = async () => {
+    try {
+      setLoading(true);
+      const response = await jobsApi.getAllJobs();
+      setJobs(response || []);
+      setError('');
+    } catch (err) {
+      setError('Failed to fetch jobs: ' + err.message);
+      setJobs([]);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleStatusChange = async (jobId, newStatus) => {
     try {
-      // Trigger status change animation
-      setStatusChangeAnimation({ jobId, status: newStatus });
-      
-      // Update job status
-      const updatedJobs = jobs.map(job =>
-        job.id === jobId ? { ...job, status: newStatus } : job
+      await jobsApi.updateJobStatus(jobId, newStatus);
+      setJobs(prevJobs =>
+        prevJobs.map(job =>
+          job.id === jobId ? { ...job, status: newStatus } : job
+        )
       );
-      setJobs(updatedJobs);
 
+      // Update selected job if it's the one being changed
       if (selectedJob && selectedJob.id === jobId) {
-        setSelectedJob({ ...selectedJob, status: newStatus });
+        setSelectedJob(prev => ({ ...prev, status: newStatus }));
       }
-
-      // Clear animation after 2 seconds
-      setTimeout(() => {
-        setStatusChangeAnimation(null);
-      }, 2000);
-
-    } catch (error) {
-      console.error("Failed to update job status:", error);
-      setError(`Failed to update job status: ${error.message}`);
-    }
-  };
-
-  const toggleJobSelection = (jobId) => {
-    setSelectedJobs(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(jobId)) {
-        newSet.delete(jobId);
-      } else {
-        newSet.add(jobId);
-      }
-      return newSet;
-    });
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedJobs.size === 0) return;
-
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete ${selectedJobs.size} job(s)? This action cannot be undone.`
-    );
-
-    if (!confirmDelete) return;
-
-    try {
-      const remainingJobs = jobs.filter(job => !selectedJobs.has(job.id));
-      setJobs(remainingJobs);
-      setSelectedJobs(new Set());
-      setBulkDeleteMode(false);
-
-      if (selectedJob && selectedJobs.has(selectedJob.id)) {
-        setSelectedJob(null);
-      }
-    } catch (error) {
-      setError(`Failed to delete jobs: ${error.message}`);
+    } catch (err) {
+      setError('Failed to update job status: ' + err.message);
     }
   };
 
   const handleDeleteJob = async (jobId) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this job? This action cannot be undone."
-    );
-
-    if (!confirmDelete) return;
-
     try {
-      const remainingJobs = jobs.filter(job => job.id !== jobId);
-      setJobs(remainingJobs);
+      await jobsApi.deleteJob(jobId);
+      setJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
 
+      // Clear selected job if it was deleted
       if (selectedJob && selectedJob.id === jobId) {
         setSelectedJob(null);
       }
-    } catch (error) {
-      setError(`Failed to delete job: ${error.message}`);
+    } catch (err) {
+      setError('Failed to delete job: ' + err.message);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="relative">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500 mx-auto mb-4"></div>
-            <div className="absolute inset-0 rounded-full h-16 w-16 border-r-4 border-l-4 border-purple-500 animate-spin mx-auto" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
-          </div>
-          <p className="text-gray-700 font-medium">Loading your job dashboard...</p>
-          <div className="mt-4 flex justify-center space-x-1">
-            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
-            <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleAddJob = async (e) => {
+    e?.preventDefault?.();
+    if (!addJobUrl.trim()) return;
+
+    try {
+      setAddingJob(true);
+      setError('');
+
+      const newJob = await jobsApi.addJob({ job_url: addJobUrl.trim() });
+      setJobs(prevJobs => [newJob, ...prevJobs]);
+      setAddJobUrl('');
+      setShowAddJobForm(false);
+    } catch (err) {
+      setError('Failed to add job: ' + err.message);
+    } finally {
+      setAddingJob(false);
+    }
+  };
+
+  // Filter and sort jobs
+  const filteredAndSortedJobs = jobs
+    .filter(job => {
+      const matchesSearch = !searchTerm ||
+        (job.title && job.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (job.company && job.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (job.metadata?.job_title && job.metadata.job_title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (job.metadata?.company && job.metadata.company.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      const matchesStatus = statusFilter === 'ALL' || job.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      let aValue = a[sortBy];
+      let bValue = b[sortBy];
+
+      // Handle nested properties
+      if (sortBy === 'title') {
+        aValue = a.title || a.metadata?.job_title || '';
+        bValue = b.title || b.metadata?.job_title || '';
+      } else if (sortBy === 'company') {
+        aValue = a.company || a.metadata?.company || '';
+        bValue = b.company || b.metadata?.company || '';
+      }
+
+      // Handle dates
+      if (sortBy === 'date_found' || sortBy === 'applied_date') {
+        aValue = aValue ? new Date(aValue) : new Date(0);
+        bValue = bValue ? new Date(bValue) : new Date(0);
+      }
+
+      if (sortOrder === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+
+  const statusOptions = [
+    { value: 'ALL', label: 'All Status', count: jobs.length },
+    { value: 'NEW', label: 'New', count: jobs.filter(j => j.status === 'NEW').length },
+    { value: 'INTERESTED', label: 'Interested', count: jobs.filter(j => j.status === 'INTERESTED').length },
+    { value: 'RESUME_GENERATED', label: 'Resume Generated', count: jobs.filter(j => j.status === 'RESUME_GENERATED').length },
+    { value: 'APPLIED', label: 'Applied', count: jobs.filter(j => j.status === 'APPLIED').length },
+    { value: 'INTERVIEW', label: 'Interviewing', count: jobs.filter(j => j.status === 'INTERVIEW').length },
+    { value: 'OFFER', label: 'Offer', count: jobs.filter(j => j.status === 'OFFER').length },
+    { value: 'REJECTED', label: 'Rejected', count: jobs.filter(j => j.status === 'REJECTED').length },
+    { value: 'DECLINED', label: 'Declined', count: jobs.filter(j => j.status === 'DECLINED').length },
+  ];
+
+  const getStatusColors = (status) => {
+    switch (status) {
+      case "NEW": return { bg: "bg-gray-100", text: "text-gray-800", dot: "bg-gray-400" };
+      case "INTERESTED": return { bg: "bg-blue-100", text: "text-blue-800", dot: "bg-blue-400" };
+      case "RESUME_GENERATED": return { bg: "bg-purple-100", text: "text-purple-800", dot: "bg-purple-400" };
+      case "APPLIED": return { bg: "bg-yellow-100", text: "text-yellow-800", dot: "bg-yellow-400" };
+      case "INTERVIEW": return { bg: "bg-indigo-100", text: "text-indigo-800", dot: "bg-indigo-400" };
+      case "OFFER": return { bg: "bg-green-100", text: "text-green-800", dot: "bg-green-400" };
+      case "REJECTED": return { bg: "bg-red-100", text: "text-red-800", dot: "bg-red-400" };
+      case "DECLINED": return { bg: "bg-orange-100", text: "text-orange-800", dot: "bg-orange-400" };
+      default: return { bg: "bg-gray-100", text: "text-gray-800", dot: "bg-gray-400" };
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100">
-      {/* Enhanced Navbar */}
-      <nav className="bg-white shadow-lg border-b border-gray-200">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl shadow-lg">
-                <Briefcase className="h-6 w-6 text-white" />
-              </div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                Job Tracker Pro
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
+      <div className="absolute top-0 left-0 w-96 h-96 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
+      <div className="absolute top-0 right-0 w-96 h-96 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
+      <div className="absolute -bottom-8 left-20 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+
+      <div className="relative container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8 animate-slide-down">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                Job Dashboard
               </h1>
+              <p className="text-gray-600 mt-2">
+                Welcome back, {currentUser?.email}! You have {jobs.length} jobs tracked.
+              </p>
             </div>
-            <button className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-200">
-              <Settings className="h-5 w-5" />
+
+            <button
+              onClick={() => setShowAddJobForm(!showAddJobForm)}
+              className="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-xl shadow-lg hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              <span>Add Job</span>
             </button>
           </div>
         </div>
-      </nav>
 
-      <main className="container mx-auto py-8 px-6">
-        {/* Success Toast */}
-        {showSuccessToast && (
-          <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
-            <div className="bg-green-50 border border-green-200 rounded-xl p-4 shadow-lg max-w-sm">
-              <div className="flex items-center space-x-3">
-                <CheckCircle className="h-5 w-5 text-green-500 animate-bounce" />
-                <p className="text-green-800 font-medium">Job added successfully!</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Error Alert with animation */}
-        {error && (
-          <div className="animate-slide-down mb-6">
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-3">
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                  <span className="text-red-800 font-medium">{error}</span>
-                </div>
-                <button
-                  className="text-red-400 hover:text-red-600 transition-colors duration-200"
-                  onClick={() => setError("")}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Enhanced Statistics Dashboard */}
-        {jobStats && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-all duration-200 border border-gray-100 hover:shadow-xl">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Total Jobs</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-2">{jobStats.total_jobs || 0}</p>
-                  <div className="flex items-center text-sm text-green-600">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    <span>+12% this week</span>
+        {/* Add Job Form */}
+        {showAddJobForm && (
+          <div className="mb-8 animate-slide-down">
+            <div className="bg-white/80 backdrop-blur-lg shadow-xl rounded-2xl p-6 border border-white/20">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Add New Job</h3>
+              <form onSubmit={handleAddJob} className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-grow">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className={`h-5 w-5 transition-colors duration-200 ${focusedField === 'jobUrl' ? 'text-indigo-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                    </div>
+                    <input
+                      type="url"
+                      value={addJobUrl}
+                      onChange={(e) => setAddJobUrl(e.target.value)}
+                      onFocus={() => setFocusedField('jobUrl')}
+                      onBlur={() => setFocusedField(null)}
+                      placeholder="Paste job URL here (LinkedIn, Indeed, etc.)"
+                      className={`
+                        block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl
+                        focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200
+                        ${focusedField === 'jobUrl' ? 'transform scale-105 shadow-lg' : 'hover:shadow-md'}
+                      `}
+                      required
+                    />
                   </div>
                 </div>
-                <div className="p-4 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-xl">
-                  <Briefcase className="w-8 h-8 text-blue-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-all duration-200 border border-gray-100 hover:shadow-xl">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Applied</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-2">{jobStats.status_counts?.APPLIED || 0}</p>
-                  <div className="flex items-center text-sm text-green-600">
-                    <Target className="h-4 w-4 mr-1" />
-                    <span>33% conversion</span>
-                  </div>
-                </div>
-                <div className="p-4 bg-gradient-to-r from-green-100 to-emerald-100 rounded-xl">
-                  <CheckCircle className="w-8 h-8 text-green-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-all duration-200 border border-gray-100 hover:shadow-xl">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Interviews</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-2">{jobStats.status_counts?.INTERVIEW || 0}</p>
-                  <div className="flex items-center text-sm text-purple-600">
-                    <Users className="h-4 w-4 mr-1" />
-                    <span>38% success rate</span>
-                  </div>
-                </div>
-                <div className="p-4 bg-gradient-to-r from-purple-100 to-violet-100 rounded-xl">
-                  <Users className="w-8 h-8 text-purple-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-all duration-200 border border-gray-100 hover:shadow-xl">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Resumes</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-2">{jobStats.resumes_generated || 0}</p>
-                  <div className="flex items-center text-sm text-indigo-600">
-                    <FileText className="h-4 w-4 mr-1" />
-                    <span>AI-generated</span>
-                  </div>
-                </div>
-                <div className="p-4 bg-gradient-to-r from-indigo-100 to-blue-100 rounded-xl">
-                  <FileText className="w-8 h-8 text-indigo-600" />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Enhanced Action Bar */}
-        <div className="bg-white rounded-xl shadow-lg mb-8 p-6 border border-gray-100">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="p-2 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-lg">
-                <Activity className="h-5 w-5 text-indigo-600" />
-              </div>
-              <h2 className="text-xl font-bold text-gray-900">Job Applications</h2>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              {jobs.length > 0 && (
-                <>
+                <div className="flex gap-2">
                   <button
-                    onClick={() => {
-                      setBulkDeleteMode(!bulkDeleteMode);
-                      setSelectedJobs(new Set());
-                    }}
+                    type="submit"
+                    disabled={addingJob}
                     className={`
-                      px-4 py-2 text-sm font-medium rounded-lg shadow-sm transition-all duration-200 transform hover:scale-105
-                      ${bulkDeleteMode
-                        ? 'bg-red-500 text-white hover:bg-red-600'
-                        : 'bg-gray-600 text-white hover:bg-gray-700'
+                      inline-flex items-center space-x-2 px-6 py-3 border border-transparent
+                      text-sm font-medium rounded-xl shadow-sm text-white transition-all duration-200
+                      transform hover:scale-105
+                      ${addingJob
+                        ? 'bg-indigo-400 cursor-not-allowed animate-pulse'
+                        : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
                       }
                     `}
                   >
-                    <Trash2 className="h-4 w-4 mr-2 inline" />
-                    {bulkDeleteMode ? "Cancel Bulk Delete" : "Bulk Delete"}
+                    {addingJob ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                        <span>Adding...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Add Job</span>
+                      </>
+                    )}
                   </button>
-
-                  {bulkDeleteMode && selectedJobs.size > 0 && (
-                    <button
-                      onClick={handleBulkDelete}
-                      className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg shadow-sm transition-all duration-200 transform hover:scale-105 animate-pulse"
-                    >
-                      Delete Selected ({selectedJobs.size})
-                    </button>
-                  )}
-                </>
-              )}
-
-              <button
-                onClick={() => {/* Clear cache function */}}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg shadow-sm transition-all duration-200 transform hover:scale-105"
-              >
-                <RefreshCw className="h-4 w-4 mr-2 inline" />
-                Clear Cache
-              </button>
-
-              <button
-                onClick={() => setShowJobSearch(!showJobSearch)}
-                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 rounded-lg shadow-sm transition-all duration-200 transform hover:scale-105"
-              >
-                <Plus className="h-4 w-4 mr-2 inline" />
-                {showJobSearch ? "Close Job Form" : "Add New Job"}
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddJobForm(false)}
+                    className="px-4 py-3 text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors duration-200"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
             </div>
-          </div>
-
-          {bulkDeleteMode && (
-            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg animate-slide-down">
-              <div className="flex items-center space-x-2">
-                <Zap className="h-4 w-4 text-yellow-600" />
-                <p className="text-sm text-yellow-700 font-medium">
-                  Bulk Delete Mode: Click on jobs to select them for deletion.
-                  Selected jobs will be highlighted.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Job Search Panel with smooth animation */}
-        {showJobSearch && (
-          <div className="animate-slide-down mb-8">
-            <JobSearch
-              onSearchComplete={handleSearchComplete}
-              userSettings={userSettings}
-              userId={currentUser.uid}
-            />
           </div>
         )}
 
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 animate-slide-down">
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center space-x-3">
+              <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-red-800">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Filters and Search */}
+        <div className="mb-8 animate-slide-in">
+          <div className="bg-white/80 backdrop-blur-lg shadow-xl rounded-2xl p-6 border border-white/20">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Search */}
+              <div className="lg:col-span-2">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search jobs by title or company..."
+                    className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-md focus:shadow-lg"
+                  />
+                </div>
+              </div>
+
+              {/* Status Filter */}
+              <div>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="block w-full px-3 py-3 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-md focus:shadow-lg"
+                >
+                  {statusOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label} ({option.count})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sort Options */}
+              <div>
+                <select
+                  value={`${sortBy}-${sortOrder}`}
+                  onChange={(e) => {
+                    const [field, order] = e.target.value.split('-');
+                    setSortBy(field);
+                    setSortOrder(order);
+                  }}
+                  className="block w-full px-3 py-3 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:shadow-md focus:shadow-lg"
+                >
+                  <option value="date_found-desc">Newest First</option>
+                  <option value="date_found-asc">Oldest First</option>
+                  <option value="title-asc">Title A-Z</option>
+                  <option value="title-desc">Title Z-A</option>
+                  <option value="company-asc">Company A-Z</option>
+                  <option value="company-desc">Company Z-A</option>
+                  <option value="status-asc">Status A-Z</option>
+                  <option value="status-desc">Status Z-A</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Main Content Area */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="animate-slide-in-left">
-            <JobList
-              jobs={jobs}
-              userId={currentUser.uid}
-              selectedJob={selectedJob}
-              onJobClick={handleJobClick}
-              bulkDeleteMode={bulkDeleteMode}
-              selectedJobs={selectedJobs}
-              onDeleteJob={handleDeleteJob}
-            />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Jobs List */}
+          <div className="lg:col-span-1">
+            <div className="bg-white/80 backdrop-blur-lg shadow-xl rounded-2xl border border-white/20 overflow-hidden">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Jobs ({filteredAndSortedJobs.length})
+                </h2>
+              </div>
+
+              <div className="max-h-[70vh] overflow-y-auto">
+                {loading ? (
+                  <div className="p-8 text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading jobs...</p>
+                  </div>
+                ) : filteredAndSortedJobs.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <svg className="h-12 w-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m8 0H8m8 0v2a2 2 0 01-2 2H10a2 2 0 01-2-2V8m8 0V6a2 2 0 00-2-2H10a2 2 0 00-2 2v2" />
+                    </svg>
+                    <p className="text-gray-600">No jobs found</p>
+                    <p className="text-gray-500 text-sm mt-1">Try adjusting your filters or add some jobs</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-200">
+                    {filteredAndSortedJobs.map((job, index) => {
+                      const title = job.title || job.metadata?.job_title || "Untitled Position";
+                      const company = job.company || job.metadata?.company || "Unknown Company";
+                      const statusColors = getStatusColors(job.status);
+                      const isSelected = selectedJob && selectedJob.id === job.id;
+
+                      return (
+                        <div
+                          key={job.id}
+                          onClick={() => setSelectedJob(job)}
+                          className={`
+                            p-4 cursor-pointer transition-all duration-200 hover:bg-gray-50 animate-slide-in
+                            ${isSelected ? 'bg-indigo-50 border-r-4 border-indigo-500' : ''}
+                          `}
+                          style={{ animationDelay: `${index * 0.1}s` }}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-grow min-w-0">
+                              <h3 className="text-sm font-semibold text-gray-900 truncate">
+                                {title}
+                              </h3>
+                              <p className="text-sm text-gray-600 truncate mt-1">
+                                {company}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {formatDate(job.date_found)}
+                              </p>
+                            </div>
+                            <div className="ml-2 flex-shrink-0">
+                              <span className={`
+                                inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                ${statusColors.bg} ${statusColors.text}
+                              `}>
+                                <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${statusColors.dot}`}></div>
+                                {job.status || 'NEW'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div className="animate-slide-in-right">
+          {/* Job Detail */}
+          <div className="lg:col-span-2">
             {selectedJob ? (
-              <JobDetail
-                job={selectedJob}
-                onStatusChange={handleStatusChange}
-                userId={currentUser.uid}
-                onDeleteJob={handleDeleteJob}
-              />
+              <div className="animate-slide-in">
+                <JobDetail
+                  job={selectedJob}
+                  onStatusChange={handleStatusChange}
+                  onDeleteJob={handleDeleteJob}
+                />
+              </div>
             ) : (
-              <div className="bg-white shadow-lg rounded-xl p-8 flex items-center justify-center min-h-[400px] border border-gray-100">
-                <div className="text-center">
-                  <div className="mx-auto h-16 w-16 bg-gradient-to-r from-gray-100 to-indigo-100 rounded-full flex items-center justify-center mb-4">
-                    <Briefcase className="h-8 w-8 text-gray-400" />
-                  </div>
-                  <p className="text-gray-500 font-medium">
-                    {bulkDeleteMode
-                      ? "Select jobs from the list to delete them"
-                      : "Select a job to view details"
-                    }
-                  </p>
-                </div>
+              <div className="bg-white/80 backdrop-blur-lg shadow-xl rounded-2xl border border-white/20 p-12 text-center animate-slide-in">
+                <svg className="h-24 w-24 text-gray-300 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m8 0H8m8 0v2a2 2 0 01-2 2H10a2 2 0 01-2-2V8m8 0V6a2 2 0 00-2-2H10a2 2 0 00-2 2v2" />
+                </svg>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">Select a Job</h3>
+                <p className="text-gray-600">Choose a job from the list to view details and manage your application</p>
               </div>
             )}
           </div>
         </div>
-      </main>
+      </div>
 
       <style jsx>{`
+        @keyframes blob {
+          0% { transform: translate(0px, 0px) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+          100% { transform: translate(0px, 0px) scale(1); }
+        }
+
         @keyframes slide-down {
           from { opacity: 0; transform: translateY(-20px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        
-        @keyframes slide-in-left {
-          from { opacity: 0; transform: translateX(-30px); }
+
+        @keyframes slide-in {
+          from { opacity: 0; transform: translateX(20px); }
           to { opacity: 1; transform: translateX(0); }
         }
-        
-        @keyframes slide-in-right {
-          from { opacity: 0; transform: translateX(30px); }
-          to { opacity: 1; transform: translateX(0); }
+
+        .animate-blob {
+          animation: blob 7s infinite;
         }
-        
-        @keyframes slide-in-right-toast {
-          from { opacity: 0; transform: translateX(100px); }
-          to { opacity: 1; transform: translateX(0); }
+
+        .animation-delay-2000 {
+          animation-delay: 2s;
         }
-        
+
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+
         .animate-slide-down {
           animation: slide-down 0.4s ease-out;
         }
-        
-        .animate-slide-in-left {
-          animation: slide-in-left 0.6s ease-out;
+
+        .animate-slide-in {
+          animation: slide-in 0.5s ease-out;
         }
-        
-        .animate-slide-in-right {
-          animation: slide-in-right 0.6s ease-out;
-        }
-        
-        .animate-slide-in-right {
-          animation: slide-in-right-toast 0.4s ease-out;
+
+        .bg-grid-pattern {
+          background-image: radial-gradient(circle, #000 1px, transparent 1px);
+          background-size: 20px 20px;
         }
       `}</style>
     </div>
