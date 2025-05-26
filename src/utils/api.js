@@ -1,11 +1,11 @@
-// src/utils/api.js - Client-side API calls with improved CORS handling
+// src/utils/api.js - Updated API client to match your OpenAPI specification
 import { auth } from '../firebase/firebase';
 
 // API Base URL - configured for DuckDNS with fallback
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL ||
   (process.env.NODE_ENV === 'production'
-    ? 'https://jobtrackai.duckdns.org'  // Your DuckDNS domain
-    : 'http://localhost:8000'           // Local development
+    ? 'https://jobtrackai.duckdns.org'
+    : 'http://localhost:8000'
   );
 
 // Helper to log headers for debugging
@@ -22,34 +22,29 @@ function logHeaders(headers) {
 function handleApiError(error, endpoint) {
   console.error(`API request to ${endpoint} failed:`, error);
 
-  // Network connectivity issues
   if (error.name === 'TypeError' && error.message.includes('fetch')) {
     throw new Error('Unable to connect to API server. Please check your connection and try again.');
   }
 
-  // CORS specific errors
   if (error.message.includes('CORS') || error.message.includes('Cross-Origin')) {
     throw new Error('CORS error: Unable to access API. Please check server configuration.');
   }
 
-  // Server errors
   if (error.message.includes('status 5')) {
     throw new Error('Server error: Please try again later or contact support.');
   }
 
-  // Client errors
   if (error.message.includes('status 4')) {
-    throw error; // Don't modify 4xx errors, they're usually specific
+    throw error;
   }
 
   throw error;
 }
 
-// Generic API request function with enhanced authentication and error handling
+// Generic API request function
 async function apiRequest(endpoint, options = {}) {
   const user = auth.currentUser;
 
-  // Debug output
   console.log(`Making request to ${endpoint}`);
   console.log('Current user:', user ? `${user.uid} (authenticated)` : 'No user (unauthenticated)');
 
@@ -57,7 +52,6 @@ async function apiRequest(endpoint, options = {}) {
     console.warn("No authenticated user! Request will use default user_id on server.");
   }
 
-  // Prepare headers
   const headers = {
     ...(options.headers || {})
   };
@@ -67,26 +61,21 @@ async function apiRequest(endpoint, options = {}) {
     headers['X-User-Id'] = user.uid;
   }
 
-  // Don't set Content-Type for FormData requests as it will be set automatically with boundary
+  // Don't set Content-Type for FormData requests
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
-  // Add Accept header
   headers['Accept'] = 'application/json';
 
-  // Log headers for debugging
   logHeaders(headers);
 
   const config = {
     method: 'GET',
     ...options,
     headers,
-    // CORS configuration
     mode: 'cors',
-    // Only include credentials for authenticated endpoints
     credentials: user ? 'include' : 'omit',
-    // Add cache control for development
     ...(process.env.NODE_ENV === 'development' && {
       cache: 'no-cache'
     })
@@ -99,7 +88,6 @@ async function apiRequest(endpoint, options = {}) {
     const response = await fetch(fullUrl, config);
     console.log(`Response status: ${response.status} ${response.statusText}`);
 
-    // Log response headers for debugging
     if (process.env.NODE_ENV === 'development') {
       console.log("Response Headers:");
       for (const [key, value] of response.headers.entries()) {
@@ -129,7 +117,7 @@ async function apiRequest(endpoint, options = {}) {
   }
 }
 
-// Enhanced retry logic for critical operations
+// Enhanced retry logic
 async function apiRequestWithRetry(endpoint, options = {}, maxRetries = 3) {
   let lastError;
 
@@ -139,7 +127,6 @@ async function apiRequestWithRetry(endpoint, options = {}, maxRetries = 3) {
     } catch (error) {
       lastError = error;
 
-      // Don't retry on client errors (4xx) or CORS errors
       if (error.message.includes('status 4') ||
           error.message.includes('CORS') ||
           error.message.includes('Cross-Origin')) {
@@ -147,7 +134,7 @@ async function apiRequestWithRetry(endpoint, options = {}, maxRetries = 3) {
       }
 
       if (attempt < maxRetries) {
-        const delay = 1000 * Math.pow(2, attempt - 1); // Exponential backoff
+        const delay = 1000 * Math.pow(2, attempt - 1);
         console.log(`Request failed, retrying in ${delay}ms (${attempt}/${maxRetries})...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -157,9 +144,127 @@ async function apiRequestWithRetry(endpoint, options = {}, maxRetries = 3) {
   throw lastError;
 }
 
-// Enhanced resume API with better error handling
+// System API
+export const systemApi = {
+  getStatus() {
+    return apiRequest('/api/status');
+  },
+
+  clearCache() {
+    return apiRequest('/api/cache/clear', { method: 'DELETE' });
+  },
+
+  cleanupCache() {
+    return apiRequest('/api/cache/cleanup', { method: 'POST' });
+  },
+
+  getCacheStats() {
+    return apiRequest('/api/cache/stats');
+  }
+};
+
+// Jobs API - Updated to match your OpenAPI spec
+export const jobsApi = {
+  // Get all jobs with filtering
+  getJobs(params = {}) {
+    const queryParams = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, value);
+      }
+    });
+
+    const queryString = queryParams.toString();
+    return apiRequest(`/api/jobs/${queryString ? '?' + queryString : ''}`);
+  },
+
+  // Get specific job
+  getJob(jobId) {
+    return apiRequest(`/api/jobs/${jobId}`);
+  },
+
+  // Analyze job from URL
+  analyzeJob(jobUrl, status = null, apiKey = null) {
+    const formData = new FormData();
+    formData.append('job_url', jobUrl);
+    if (status) {
+      formData.append('status', status);
+    }
+
+    const headers = {};
+    if (apiKey) {
+      headers['X-Api-Key'] = apiKey;
+    }
+
+    return apiRequestWithRetry('/api/jobs/analyze', {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+  },
+
+  // Update job status
+  updateJobStatus(jobId, status) {
+    return apiRequest(`/api/jobs/${jobId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    });
+  },
+
+  // Delete job
+  deleteJob(jobId, cascadeResumes = false) {
+    const params = new URLSearchParams();
+    if (cascadeResumes) {
+      params.append('cascade_resumes', 'true');
+    }
+
+    return apiRequest(`/api/jobs/${jobId}${params.toString() ? '?' + params.toString() : ''}`, {
+      method: 'DELETE'
+    });
+  },
+
+  // Delete multiple jobs
+  deleteJobsBatch(jobIds, cascadeResumes = false) {
+    const params = new URLSearchParams();
+    if (cascadeResumes) {
+      params.append('cascade_resumes', 'true');
+    }
+
+    return apiRequest(`/api/jobs/batch${params.toString() ? '?' + params.toString() : ''}`, {
+      method: 'DELETE',
+      body: JSON.stringify(jobIds)
+    });
+  },
+
+  // Get job statistics
+  getJobStats() {
+    return apiRequest('/api/jobs/stats');
+  },
+
+  // Get resumes for a specific job
+  getJobResumes(jobId) {
+    return apiRequest(`/api/jobs/${jobId}/resumes`);
+  },
+
+  // Legacy method for compatibility
+  addJobByUrl(jobUrl, apiKey) {
+    return this.analyzeJob(jobUrl, null, apiKey);
+  },
+
+  // Legacy methods for compatibility
+  getSystemStatus: () => systemApi.getStatus(),
+  generateResume: (jobId, settings, customize = true, template = "standard") => {
+    return resumeApi.generateResume(jobId, settings, customize, template);
+  },
+  getResumeYaml: (resumeId) => resumeApi.getResumeYaml(resumeId),
+  getResumeStatus: (resumeId) => resumeApi.getResumeStatus(resumeId)
+};
+
+// Resume API - Updated to match your OpenAPI spec
 export const resumeApi = {
-  generateResume(jobId, settings, customize = true, template = "standard") {
+  // Generate resume
+  generateResume(jobId, settings, customize = true, template = "standard", handleExisting = "replace") {
     const apiKey = settings?.openaiApiKey || "";
     const resumeData = settings?.resumeData || null;
 
@@ -174,23 +279,102 @@ export const resumeApi = {
     if (resumeData) {
       requestBody.resume_data = resumeData;
       console.log("Including user's resume data in generation request");
-    } else {
-      console.warn("No resume data provided for job-specific customization");
     }
 
-    return apiRequestWithRetry('/api/resume/generate', {
+    const params = new URLSearchParams();
+    params.append('handle_existing', handleExisting);
+
+    const headers = {};
+    if (apiKey) {
+      headers['X-Api-Key'] = apiKey;
+    }
+
+    return apiRequestWithRetry(`/api/resume/generate?${params.toString()}`, {
       method: 'POST',
-      headers: {
-        'X-Api-Key': apiKey
-      },
+      headers,
       body: JSON.stringify(requestBody)
     });
   },
 
+  // Get resume status
   getResumeStatus(resumeId) {
     return apiRequest(`/api/resume/${resumeId}/status`);
   },
 
+  // Download resume
+  downloadResume(resumeId, format = 'yaml') {
+    const params = new URLSearchParams();
+    params.append('format', format);
+
+    return apiRequest(`/api/resume/${resumeId}/download?${params.toString()}`);
+  },
+
+  // Get resume YAML content
+  async getResumeYaml(resumeId) {
+    try {
+      const response = await this.downloadResume(resumeId, 'yaml');
+      return response.content;
+    } catch (error) {
+      console.error('Error downloading resume YAML:', error);
+      throw error;
+    }
+  },
+
+  // Upload custom resume
+  uploadResume(file, jobId = null) {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (jobId) {
+      formData.append('job_id', jobId);
+    }
+
+    return apiRequest('/api/resume/upload', {
+      method: 'POST',
+      body: formData
+    });
+  },
+
+  // Update resume YAML
+  updateResumeYaml(resumeId, yamlContent) {
+    const formData = new FormData();
+    formData.append('yaml_content', yamlContent);
+
+    return apiRequest(`/api/resume/${resumeId}/update-yaml`, {
+      method: 'POST',
+      body: formData
+    });
+  },
+
+  // Delete resume
+  deleteResume(resumeId, updateJob = true) {
+    const params = new URLSearchParams();
+    params.append('update_job', updateJob.toString());
+
+    return apiRequest(`/api/resume/${resumeId}?${params.toString()}`, {
+      method: 'DELETE'
+    });
+  },
+
+  // Get user resumes
+  getUserResumes(params = {}) {
+    const queryParams = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, value);
+      }
+    });
+
+    const queryString = queryParams.toString();
+    return apiRequest(`/api/resume/${queryString ? '?' + queryString : ''}`);
+  },
+
+  // Get active resume generations
+  getActiveResumeGenerations() {
+    return apiRequest('/api/resume/active');
+  },
+
+  // Polling for resume status
   async pollResumeStatus(resumeId, maxAttempts = 20, interval = 3000) {
     let attempts = 0;
     let lastStatus = null;
@@ -221,24 +405,20 @@ export const resumeApi = {
             return;
           }
 
-          // Continue polling for in-progress statuses
           if (statusData.status === 'processing' || statusData.status === 'queued' || statusData.status === 'pending') {
             setTimeout(checkStatus, interval);
           } else {
-            // Unknown status, continue polling but log warning
             console.warn(`Unknown resume status: ${statusData.status}, continuing to poll...`);
             setTimeout(checkStatus, interval);
           }
         } catch (error) {
           console.error(`Error checking resume status (attempt ${attempts}):`, error);
 
-          // If we've made several attempts and keep failing, give up
           if (attempts >= 5) {
             reject(error);
             return;
           }
 
-          // Otherwise, retry after a longer delay
           setTimeout(checkStatus, interval * 2);
         }
       };
@@ -247,108 +427,21 @@ export const resumeApi = {
     });
   },
 
-  async getResumeYaml(resumeId) {
-    try {
-      const response = await apiRequest(`/api/resume/${resumeId}/download?format=yaml`);
-      return response.content;
-    } catch (error) {
-      console.error('Error downloading resume YAML:', error);
-      throw error;
-    }
-  },
-
-  uploadToSimplify(jobId, resumeId = null) {
-    return apiRequest('/api/resume/upload-to-simplify', {
-      method: 'POST',
-      body: JSON.stringify({
-        job_id: jobId,
-        resume_id: resumeId
-      })
-    });
-  },
-
+  // Legacy method for compatibility
   async saveResumeYaml(resumeId, yamlContent) {
     try {
-      const formData = new FormData();
-      formData.append('yaml_content', yamlContent);
-
-      return await apiRequest(`/api/resume/${resumeId}/update-yaml`, {
-        method: 'POST',
-        body: formData
-      });
+      return await this.updateResumeYaml(resumeId, yamlContent);
     } catch (error) {
       console.error(`Error saving resume YAML:`, error);
       throw error;
     }
-  },
-};
-
-// Job-related API functions
-export const jobsApi = {
-  getSystemStatus: () => {
-    return apiRequest('/api/status');
-  },
-
-  getJobs: (params = {}) => {
-    const queryParams = new URLSearchParams();
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        queryParams.append(key, value);
-      }
-    });
-
-    const queryString = queryParams.toString();
-    return apiRequest(`/api/jobs${queryString ? '?' + queryString : ''}`);
-  },
-
-  getJob: (jobId) => {
-    return apiRequest(`/api/jobs/${jobId}`);
-  },
-
-  updateJobStatus: (jobId, status) => {
-    return apiRequest(`/api/jobs/${jobId}/status`, {
-      method: 'PUT',
-      body: JSON.stringify({ status })
-    });
-  },
-
-  generateResume: (jobId, settings, customize = true, template = "standard") => {
-    return resumeApi.generateResume(jobId, settings, customize, template);
-  },
-
-  uploadToSimplify: (jobId, resumeId = null) => {
-    return resumeApi.uploadToSimplify(jobId, resumeId);
-  },
-
-  getResumeYaml: (resumeId) => {
-    return resumeApi.getResumeYaml(resumeId);
-  },
-
-  getResumeStatus: (resumeId) => {
-    return resumeApi.getResumeStatus(resumeId);
-  },
-
-  addJobByUrl: (jobUrl, apiKey) => {
-    const formData = new FormData();
-    formData.append('job_url', jobUrl);
-
-    return apiRequestWithRetry('/api/jobs/analyze', {
-      method: 'POST',
-      headers: {
-        'X-Api-Key': apiKey
-      },
-      body: formData
-    });
   }
 };
 
-// Enhanced Simplify API with hybrid authentication approach
+// Simplify API - Updated to match your OpenAPI spec
 export const simplifyApi = {
-  /**
-   * Store both CSRF and authorization tokens
-   */
-  storeTokens: (tokens) => {
+  // Store authentication tokens
+  storeTokens(tokens) {
     console.log('🔑 Storing authentication tokens...');
     return apiRequest('/api/simplify/store-tokens', {
       method: 'POST',
@@ -356,52 +449,21 @@ export const simplifyApi = {
     });
   },
 
-  /**
-   * Store Simplify session data (legacy method - kept for backward compatibility)
-   */
-  storeSession: (sessionData) => {
-    return apiRequest('/api/simplify/store-session', {
-      method: 'POST',
-      body: JSON.stringify(sessionData)
-    });
-  },
-
-  /**
-   * Store authorization token manually (legacy method)
-   */
-  storeAuthToken: (authToken) => {
-    console.log('🔑 Storing authorization token...');
-    return apiRequest('/api/simplify/store-auth', {
-      method: 'POST',
-      body: JSON.stringify({
-        authorization: authToken
-      })
-    });
-  },
-
-  /**
-   * Check if user has a valid Simplify session
-   */
-  checkSession: () => {
+  // Check session validity
+  checkSession() {
     return apiRequest('/api/simplify/check-session');
   },
 
-  /**
-   * Get stored tokens
-   */
-  getStoredTokens: () => {
+  // Get stored tokens
+  getStoredTokens() {
     return apiRequest('/api/simplify/get-tokens');
   },
 
-  /**
-   * Upload PDF resume to Simplify via backend proxy
-   */
-  uploadResumeToSimplify: (pdfBlob, resumeId, jobId = null) => {
+  // Upload PDF resume to Simplify
+  uploadResumeToSimplify(pdfBlob, resumeId, jobId = null) {
     console.log('📤 Uploading resume to Simplify via backend proxy...');
 
     const formData = new FormData();
-
-    // Create filename from resume ID or use default
     const fileName = `resume_${resumeId}.pdf`;
     formData.append('resume_pdf', pdfBlob, fileName);
     formData.append('resume_id', resumeId);
@@ -416,47 +478,21 @@ export const simplifyApi = {
     });
   },
 
-  /**
-   * Clear stored session data
-   */
-  clearSession: () => {
-    return apiRequest('/api/simplify/clear-session', {
-      method: 'DELETE'
-    });
-  },
-
-  /**
-   * Debug session data (for development)
-   */
-  debugSession: () => {
-    if (process.env.NODE_ENV === 'development') {
-      return apiRequest('/api/simplify/session-debug');
-    } else {
-      console.warn('Debug session only available in development mode');
-      return Promise.resolve({ message: 'Debug not available in production' });
-    }
-  },
-
-  /**
-   * Get current user ID for token management
-   */
-  getCurrentUserId: () => {
+  // Get current user ID for token management
+  getCurrentUserId() {
     const user = auth.currentUser;
     return user?.uid || 'default_user';
   }
 };
 
-// Enhanced health check function without credentials
+// Enhanced health check function
 export const healthCheck = async () => {
   try {
     console.log('Performing health check...');
 
-    // First try without credentials (should work with any CORS setup)
     const response = await fetch(`${API_BASE_URL}/api/status`, {
       method: 'GET',
       mode: 'cors',
-      // Remove credentials for health check to avoid CORS issues
-      // credentials: 'include',
       headers: {
         'Accept': 'application/json'
       }
@@ -481,12 +517,11 @@ export const healthCheck = async () => {
   }
 };
 
-// Utility to test CORS configuration
+// CORS testing utility
 export const testCORS = async () => {
   try {
     console.log('Testing CORS configuration...');
 
-    // Test OPTIONS request
     const optionsResponse = await fetch(`${API_BASE_URL}/api/status`, {
       method: 'OPTIONS',
       mode: 'cors',
@@ -506,7 +541,6 @@ export const testCORS = async () => {
       }
     }
 
-    // Test actual GET request
     const getResponse = await healthCheck();
 
     return {

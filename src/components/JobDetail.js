@@ -1,6 +1,6 @@
 // JobDetail.js - Fixed version with proper YAML state reset on job change
-import React, { useState, useEffect, useRef  } from 'react';
-import { jobsApi,resumeApi } from '../utils/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { jobsApi, resumeApi } from '../utils/api';
 import ResumeStatusTracker from './ResumeStatusTracker';
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
@@ -8,7 +8,7 @@ import { doc, getDoc } from "firebase/firestore";
 import ResumeYamlModal from './ResumeYamlModal';
 import SimplifyUploadModal from './SimplifyUploadModal';
 
-function JobDetail({ job, onStatusChange }) {
+function JobDetail({ job, onStatusChange, onDeleteJob }) {
   const [generatingResume, setGeneratingResume] = useState(false);
   const [resumeError, setResumeError] = useState('');
   const [resumeMessage, setResumeMessage] = useState('');
@@ -20,17 +20,15 @@ function JobDetail({ job, onStatusChange }) {
   const [showYamlModal, setShowYamlModal] = useState(false);
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [fetchingYamlForModal, setFetchingYamlForModal] = useState(false);
+  const [showSimplifyModal, setShowSimplifyModal] = useState(false);
+
   const { currentUser, getUserSettings } = useAuth();
   const fetchingYaml = useRef(false);
   const yamlFetched = useRef(false);
-  const [showSimplifyModal, setShowSimplifyModal] = useState(false);
-
-  // Add a ref to track the current job ID
   const currentJobId = useRef(job.id);
 
-  // NEW: Clear ALL state when job changes - this is the key fix
+  // Clear ALL state when job changes - this is the key fix
   useEffect(() => {
-    // Check if the job has actually changed
     if (currentJobId.current !== job.id) {
       console.log(`Job changed from ${currentJobId.current} to ${job.id} - resetting all state`);
 
@@ -41,7 +39,7 @@ function JobDetail({ job, onStatusChange }) {
       setUploadingToSimplify(false);
       setFetchingYamlForModal(false);
 
-      // IMPORTANT: Reset YAML-related state
+      // Reset YAML-related state
       setResumeYaml(null);
       yamlFetched.current = false;
       fetchingYaml.current = false;
@@ -52,7 +50,7 @@ function JobDetail({ job, onStatusChange }) {
       // Update resume ID from the new job
       setResumeId(job.resume_id || null);
     }
-  }, [job.id]); // Only depend on job.id to detect actual job changes
+  }, [job.id]);
 
   // Fetch user's resume data when component mounts
   useEffect(() => {
@@ -76,7 +74,7 @@ function JobDetail({ job, onStatusChange }) {
     fetchUserResume();
   }, [currentUser]);
 
-  // IMPROVED: Fetch YAML when conditions are met, now properly resets per job
+  // Fetch YAML when conditions are met
   useEffect(() => {
     console.log('Checking if should fetch YAML:', {
       resumeId,
@@ -95,22 +93,22 @@ function JobDetail({ job, onStatusChange }) {
       console.log('Conditions met - fetching YAML for job', job.id);
       fetchResumeYaml();
     }
-  }, [resumeId, job.status, resumeYaml, job.id]); // Add job.id as dependency
+  }, [resumeId, job.status, resumeYaml, job.id]);
 
   const fetchResumeYaml = async () => {
     if (fetchingYaml.current || yamlFetched.current) {
       console.log('Skipping YAML fetch - already fetching or fetched');
-      return; // Prevent duplicate calls
+      return;
     }
 
     try {
       fetchingYaml.current = true;
       console.log('Fetching resume YAML for resumeId:', resumeId, 'jobId:', job.id);
 
-      const yamlContent = await jobsApi.getResumeYaml(resumeId);
+      const yamlContent = await resumeApi.getResumeYaml(resumeId);
       if (yamlContent) {
         setResumeYaml(yamlContent);
-        yamlFetched.current = true; // Mark as fetched
+        yamlFetched.current = true;
         console.log('Resume YAML fetched successfully for job', job.id);
       }
     } catch (error) {
@@ -121,23 +119,20 @@ function JobDetail({ job, onStatusChange }) {
     }
   };
 
-  // New function to handle View/Edit Resume button click
   const handleViewEditResume = async () => {
     try {
-      // If we already have the YAML, just show the modal
       if (resumeYaml) {
         setShowYamlModal(true);
         return;
       }
 
-      // If we don't have the YAML, fetch it first
       if (resumeId && !fetchingYamlForModal) {
         setFetchingYamlForModal(true);
         setResumeError('');
 
         console.log('Fetching resume YAML for modal, resumeId:', resumeId);
 
-        const yamlContent = await jobsApi.getResumeYaml(resumeId);
+        const yamlContent = await resumeApi.getResumeYaml(resumeId);
         if (yamlContent) {
           setResumeYaml(yamlContent);
           yamlFetched.current = true;
@@ -178,15 +173,11 @@ function JobDetail({ job, onStatusChange }) {
       setResumeYaml(null);
       yamlFetched.current = false;
 
-      // Check if we have user resume data
       if (!userResumeData) {
         throw new Error("Your resume data is not available. Please update your resume in Settings.");
       }
 
-      // Get user settings
       const settings = await getUserSettings() || {};
-
-      // Include user resume data in the request
       const requestData = {
         ...settings,
         resumeData: userResumeData
@@ -194,15 +185,11 @@ function JobDetail({ job, onStatusChange }) {
 
       console.log("Sending resume data for job:", job.id);
 
-      // Make the API call to generate resume
-      const response = await jobsApi.generateResume(job.id, requestData, true);
+      const response = await resumeApi.generateResume(job.id, requestData, true);
 
-      // Save the resume ID from the response
       if (response && response.resume_id) {
         setResumeId(response.resume_id);
         setShowStatusTracker(true);
-
-        // Update the job status
         onStatusChange(job.id, 'RESUME_GENERATED');
       } else {
         setResumeMessage('Resume generation initiated. Check status later.');
@@ -225,14 +212,12 @@ function JobDetail({ job, onStatusChange }) {
 
   const handleResumeComplete = async (resumeData) => {
     setResumeMessage('Resume generated successfully!');
-    setShowStatusTracker(false); // Hide the status tracker to stop polling
+    setShowStatusTracker(false);
 
-    // Only update status if it's not already RESUME_GENERATED
     if (job.status !== 'RESUME_GENERATED') {
       onStatusChange(job.id, 'RESUME_GENERATED');
     }
 
-    // Fetch YAML if we haven't already
     if (!resumeYaml && !yamlFetched.current) {
       await fetchResumeYaml();
     }
@@ -243,10 +228,7 @@ function JobDetail({ job, onStatusChange }) {
       setResumeError('');
       setResumeMessage('Saving resume changes...');
 
-      // Call the API to save the updated YAML content
-      await resumeApi.saveResumeYaml(resumeId, yamlContent);
-
-      // Update the local state with the new YAML content
+      await resumeApi.updateResumeYaml(resumeId, yamlContent);
       setResumeYaml(yamlContent);
       setResumeMessage('Resume updated successfully!');
     } catch (error) {
@@ -255,7 +237,19 @@ function JobDetail({ job, onStatusChange }) {
     }
   };
 
-  // FIXED: Check if Upload to Simplify should be enabled
+  const handleDeleteJob = () => {
+    const title = job.title || job.metadata?.job_title || "this job";
+    const company = job.company || job.metadata?.company || "Unknown Company";
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete the job "${title}" at "${company}"? This action cannot be undone.`
+    );
+
+    if (confirmDelete) {
+      onDeleteJob(job.id);
+    }
+  };
+
   const isUploadToSimplifyEnabled = () => {
     const currentStatus = job.status;
     const enabledStatuses = ['RESUME_GENERATED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED', 'DECLINED'];
@@ -264,18 +258,10 @@ function JobDetail({ job, onStatusChange }) {
 
   // Access job properties safely
   const metadata = job.metadata || {};
-
-  // Get title from either top-level or metadata
   const title = job.title || metadata.job_title || "Untitled Position";
-
-  // Get company from either top-level or metadata
   const company = job.company || metadata.company || "Unknown Company";
-
-  // Get team if available
   const team = metadata.team || null;
-
-  // Get location from either top-level or determine from metadata
-  const location = job.location || (job.metadata?.is_fully_remote ? "Remote" : job.metadata?.location)
+  const location = job.location || (job.metadata?.is_fully_remote ? "Remote" : job.metadata?.location);
 
   // Format date string if available
   const formatDate = (dateString) => {
@@ -283,64 +269,19 @@ function JobDetail({ job, onStatusChange }) {
     return new Date(dateString).toLocaleString();
   };
 
-  // Extract date posted/found
   const getDatePosted = () => {
-    if (metadata.date_posted) {
-      return formatDate(metadata.date_posted);
-    }
-    if (job.date_found) {
-      return formatDate(job.date_found);
-    }
+    if (metadata.date_posted) return formatDate(metadata.date_posted);
+    if (job.date_found) return formatDate(job.date_found);
     return 'Not specified';
   };
 
-  // Get applied date if available
-  const getAppliedDate = () => {
-    if (job.applied_date) {
-      return formatDate(job.applied_date);
-    }
-    return 'Not applied yet';
-  };
-
-  // Get rejected date if available
-  const getRejectedDate = () => {
-    if (job.rejected_date) {
-      return formatDate(job.rejected_date);
-    }
-    return 'N/A';
-  };
-
-  // Extract job type from metadata if it exists
-  const getJobType = () => {
-    if (metadata.employment_type) {
-      return metadata.employment_type;
-    }
-    if (metadata.job_type) {
-      return metadata.job_type;
-    }
-    return 'Not specified';
-  };
-
-  // Determine if job is Easy Apply
-  const isEasyApply = () => {
-    if (metadata.is_easy_apply) {
-      return metadata.is_easy_apply === true ? 'Yes' : 'No';
-    }
-    return 'No';
-  };
-
-  // Get salary information if available
-  const getSalary = () => {
-    if (metadata.salary) {
-      return metadata.salary;
-    }
-    return 'Not specified';
-  };
-
-  // Get job description
+  const getAppliedDate = () => job.applied_date ? formatDate(job.applied_date) : 'Not applied yet';
+  const getRejectedDate = () => job.rejected_date ? formatDate(job.rejected_date) : 'N/A';
+  const getJobType = () => metadata.employment_type || metadata.job_type || 'Not specified';
+  const isEasyApply = () => metadata.is_easy_apply === true ? 'Yes' : 'No';
+  const getSalary = () => metadata.salary || 'Not specified';
   const description = job.description || metadata.job_summary || "No description available";
 
-  // Format skills sections if available
   const formatSkillsList = (skills) => {
     if (!skills || skills.length === 0) return "None listed";
     return skills.join(", ");
@@ -354,9 +295,9 @@ function JobDetail({ job, onStatusChange }) {
           <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
           <p className="mt-1 text-md text-gray-700">{company}</p>
         </div>
-        <div className="w-full sm:w-auto">
+        <div className="flex items-center gap-2">
           <select
-            className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+            className="block pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
             value={job.status || 'NEW'}
             onChange={(e) => onStatusChange(job.id, e.target.value)}
           >
@@ -366,6 +307,17 @@ function JobDetail({ job, onStatusChange }) {
               </option>
             ))}
           </select>
+
+          {/* Delete Job Button */}
+          <button
+            onClick={handleDeleteJob}
+            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+            title="Delete job"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -418,7 +370,6 @@ function JobDetail({ job, onStatusChange }) {
 
         {/* Skills Sections */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Technical Skills */}
           {metadata.technical_skills && (
             <div>
               <h4 className="text-sm font-medium text-gray-500 mb-1">Technical Skills</h4>
@@ -428,7 +379,6 @@ function JobDetail({ job, onStatusChange }) {
             </div>
           )}
 
-          {/* Non-Technical Skills */}
           {metadata.non_technical_skills && (
             <div>
               <h4 className="text-sm font-medium text-gray-500 mb-1">Non-Technical Skills</h4>
@@ -439,7 +389,7 @@ function JobDetail({ job, onStatusChange }) {
           )}
         </div>
 
-        {/* ATS Keywords if available */}
+        {/* ATS Keywords */}
         {metadata.ats_keywords && metadata.ats_keywords.length > 0 && (
           <div className="mt-4">
             <h4 className="text-sm font-medium text-gray-500 mb-1">ATS Keywords</h4>
@@ -466,7 +416,6 @@ function JobDetail({ job, onStatusChange }) {
               {description}
             </div>
 
-            {/* Render duties if available */}
             {metadata.duties && metadata.duties.length > 0 && (
               <div className="mt-4">
                 <h5 className="font-medium text-gray-900 mb-2">Responsibilities:</h5>
@@ -478,7 +427,6 @@ function JobDetail({ job, onStatusChange }) {
               </div>
             )}
 
-            {/* Render qualifications if available */}
             {metadata.qualifications && metadata.qualifications.length > 0 && (
               <div className="mt-4">
                 <h5 className="font-medium text-gray-900 mb-2">Qualifications:</h5>
@@ -491,6 +439,7 @@ function JobDetail({ job, onStatusChange }) {
             )}
           </div>
         </div>
+
         {/* Resume section */}
         {resumeId && (job.status === 'RESUME_GENERATED' || job.status === 'APPLIED' || job.status === 'INTERVIEW' || job.status === 'OFFER' || job.status === 'REJECTED' || job.status === 'DECLINED') && (
           <div className="mt-6 border-t border-gray-200 pt-4">
@@ -513,7 +462,6 @@ function JobDetail({ job, onStatusChange }) {
             </div>
           </div>
         )}
-
       </div>
 
       {/* Error/Success Messages */}
@@ -546,7 +494,7 @@ function JobDetail({ job, onStatusChange }) {
         </div>
       )}
 
-      {/* Resume YAML Modal */}
+      {/* Modals */}
       {showYamlModal && (
         <ResumeYamlModal
           yamlContent={resumeYaml}
@@ -554,64 +502,65 @@ function JobDetail({ job, onStatusChange }) {
           onClose={() => setShowYamlModal(false)}
         />
       )}
-        {showSimplifyModal && (
-          <SimplifyUploadModal
-            isOpen={showSimplifyModal}
-            onClose={() => setShowSimplifyModal(false)}
-            resumeId={resumeId}
-            jobId={job.id}
-            onUploadComplete={handleSimplifyUploadComplete}
-          />
-        )}
+
+      {showSimplifyModal && (
+        <SimplifyUploadModal
+          isOpen={showSimplifyModal}
+          onClose={() => setShowSimplifyModal(false)}
+          resumeId={resumeId}
+          jobId={job.id}
+          onUploadComplete={handleSimplifyUploadComplete}
+        />
+      )}
 
       {/* Action Buttons */}
-     <div className="px-6 py-4 bg-gray-50 flex flex-wrap gap-3 justify-end rounded-b-lg">
-             <button
-               type="button"
-               className="flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-               onClick={handleGenerateResume}
-               disabled={generatingResume || showStatusTracker || !userResumeData}
-             >
-               {generatingResume ? (
-                 <>
-                   <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></span>
-                   Generating Resume...
-                 </>
-               ) : (
-                 "Generate Resume"
-               )}
-             </button>
+      <div className="px-6 py-4 bg-gray-50 flex flex-wrap gap-3 justify-end rounded-b-lg">
+        <button
+          type="button"
+          className="flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          onClick={handleGenerateResume}
+          disabled={generatingResume || showStatusTracker || !userResumeData}
+        >
+          {generatingResume ? (
+            <>
+              <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></span>
+              Generating Resume...
+            </>
+          ) : (
+            "Generate Resume"
+          )}
+        </button>
 
-             <button
-               type="button"
-               className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-               onClick={handleUploadToSimplify}
-               disabled={uploadingToSimplify || !isUploadToSimplifyEnabled()}
-             >
-               {uploadingToSimplify ? (
-                 <>
-                   <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-gray-700 rounded-full"></span>
-                   Uploading to Simplify...
-                 </>
-               ) : (
-                 "Upload to Simplify"
-               )}
-             </button>
+        <button
+          type="button"
+          className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={handleUploadToSimplify}
+          disabled={uploadingToSimplify || !isUploadToSimplifyEnabled()}
+        >
+          {uploadingToSimplify ? (
+            <>
+              <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-gray-700 rounded-full"></span>
+              Uploading to Simplify...
+            </>
+          ) : (
+            "Upload to Simplify"
+          )}
+        </button>
 
-             <button
-               type="button"
-               className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-               onClick={() => {
-                 onStatusChange(job.id, 'APPLIED');
-                 window.open(job.job_url, '_blank');
-               }}
-               disabled={!job.job_url}
-             >
-               Apply
-             </button>
-           </div>
-         </div>
-       );
-     }
+        <button
+          type="button"
+          className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          onClick={() => {
+            onStatusChange(job.id, 'APPLIED');
+            window.open(job.job_url, '_blank');
+          }}
+          disabled={!job.job_url}
+        >
+          Apply
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default JobDetail;
