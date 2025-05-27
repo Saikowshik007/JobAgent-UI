@@ -1,0 +1,518 @@
+classDiagram
+%% Core Application Structure
+    class App {
+        +render()
+        +Routes configuration
+        +AuthProvider wrapper
+    }
+
+    class AuthProvider {
+        -currentUser: User
+        -loading: boolean
+        +signup(email, password, openaiApiKey)
+        +login(email, password)
+        +logout()
+        +getUserSettings()
+        +updateUserSettings(settings)
+        +useAuth() : AuthContext
+    }
+
+    class PrivateRoute {
+        +children: ReactNode
+        +render()
+        +checkAuthentication()
+    }
+
+%% Main Dashboard Components
+    class Dashboard {
+        -jobs: Job[]
+        -selectedJob: Job
+        -loading: boolean
+        -error: string
+        -showYamlModal: boolean
+        -showSimplifyModal: boolean
+        -resumeYaml: string
+        -currentResumeId: string
+        -resumeYamlVersion: number
+        +fetchData()
+        +handleJobClick(job)
+        +handleStatusChange(jobId, status)
+        +handleDeleteJob(jobId)
+        +handleShowYamlModal(resumeId)
+        +handleShowSimplifyModal(resumeId)
+        +handleSaveYaml(yamlContent, parsedData)
+        +refreshJobStats()
+    }
+
+    class JobList {
+        +jobs: Job[]
+        +selectedJob: Job
+        +onJobClick: function
+        +bulkDeleteMode: boolean
+        +selectedJobs: Set
+        +onDeleteJob: function
+        -statusFilter: string
+        -searchQuery: string
+        -animatingJobs: Set
+        -justUpdatedJobs: Set
+        +getJobTitle(job)
+        +getJobCompany(job)
+        +getJobLocation(job)
+        +getStatusInfo(status)
+        +handleDeleteClick(jobId)
+        +toggleJobSelection(jobId)
+    }
+
+    class JobDetail {
+        +job: Job
+        +onStatusChange: function
+        +onDeleteJob: function
+        +onShowYamlModal: function
+        +onShowSimplifyModal: function
+        +resumeYamlVersion: number
+        -generatingResume: boolean
+        -resumeError: string
+        -resumeMessage: string
+        -showStatusTracker: boolean
+        -userResumeData: object
+        -expandedDescription: boolean
+        +handleGenerateResume()
+        +handleViewEditResume()
+        +handleUploadToSimplify()
+        +handleStatusChange(newStatus)
+        +handleDeleteJob()
+        +getStatusColors(status)
+        +isUploadToSimplifyEnabled()
+    }
+
+    class JobSearch {
+        +onSearchComplete: function
+        +userSettings: object
+        +userId: string
+        -jobUrl: string
+        -loading: boolean
+        -error: string
+        -progress: object
+        -selectedStatus: string
+        -showSuccess: boolean
+        +handleAnalyze(event)
+        +downloadSampleFile()
+        +getStatusDisplay()
+    }
+
+%% Resume Management Components
+    class ResumeYamlModal {
+        +yamlContent: string
+        +onSave: function
+        +onClose: function
+        -resumeData: object
+        -activeTab: string
+        -showYamlView: boolean
+        -yamlString: string
+        -includeObjective: boolean
+        -showPreview: boolean
+        +updateYamlString(newData)
+        +handleBasicInfoChange(event)
+        +handleWebsiteChange(index, value)
+        +handleObjectiveChange(event)
+        +handleEducationChange(schoolIndex, field, value)
+        +handleExperienceChange(expIndex, field, value)
+        +handleProjectChange(projIndex, field, value)
+        +handleSkillCategoryChange(catIndex, value)
+        +handleSave()
+        +addWebsite()
+        +addEducation()
+        +addExperience()
+        +addProject()
+        +addSkillCategory()
+    }
+
+    class ResumeDocument {
+        +data: object
+        +render()
+        +styles: StyleSheet
+    }
+
+    class ResumeStatusTracker {
+        +resumeId: string
+        +onComplete: function
+        -status: string
+        -message: string
+        -progress: number
+        -error: string
+        -statusData: object
+        +checkStatus()
+        +updateProgress()
+        +getStatusDisplay()
+        +pollResumeStatus()
+    }
+
+    class SimplifyUploadModal {
+        +isOpen: boolean
+        +onClose: function
+        +resumeId: string
+        +jobId: string
+        +resumeYamlVersion: number
+        +onUploadComplete: function
+        -status: string
+        -error: string
+        -resumeData: object
+        -generatingPdf: boolean
+        -sessionStatus: object
+        -csrfToken: string
+        -authToken: string
+        +checkSessionAndLoadData()
+        +fetchResumeData(forceRefresh)
+        +generatePdfBlob()
+        +handleTokenSubmit()
+        +uploadToSimplifyViaBackend()
+        +retryCheck()
+    }
+
+%% Authentication Components
+    class Login {
+        -email: string
+        -password: string
+        -error: string
+        -loading: boolean
+        -showPassword: boolean
+        -focusedField: string
+        -showSuccess: boolean
+        +handleSubmit(event)
+        +togglePasswordVisibility()
+        +features: object[]
+    }
+
+    class Register {
+        -email: string
+        -password: string
+        -confirmPassword: string
+        -openaiApiKey: string
+        -error: string
+        -loading: boolean
+        -resumeFile: File
+        -resumeData: object
+        -entryMethod: string
+        -showPassword: boolean
+        -showConfirmPassword: boolean
+        -manualResumeData: object
+        +handleSubmit(event)
+        +handleResumeUpload(event)
+        +uploadResumeToFirebase(userId, resumeData)
+        +toggleEntryMethod()
+        +downloadSampleFile()
+        +handleBasicInfoChange(event)
+        +handleWebsiteChange(index, value)
+        +handleObjectiveChange(event)
+    }
+
+%% Navigation Components
+    class Navbar {
+        -error: string
+        -mobileMenuOpen: boolean
+        -userMenuOpen: boolean
+        -isLoggingOut: boolean
+        +handleLogout()
+        +toggleMobileMenu()
+        +toggleUserMenu()
+    }
+
+    class Footer {
+        -visible: boolean
+        +componentDidMount()
+    }
+
+%% Settings Component
+    class Settings {
+        -loading: boolean
+        -error: string
+        -success: string
+        -activeTab: string
+        -resumeFile: File
+        -formData: object
+        -resumeData: object
+        +loadUserSettings()
+        +handleInputChange(event)
+        +handleResumeUpload(event)
+        +handleSubmit(event)
+        +handleBasicInfoChange(event)
+        +handleEducationChange(schoolIndex, field, value)
+        +handleExperienceChange(expIndex, field, value)
+        +handleProjectChange(projIndex, field, value)
+        +handleSkillCategoryChange(catIndex, value)
+        +exportResumeYaml()
+        +addEducation()
+        +addExperience()
+        +addProject()
+        +addSkillCategory()
+    }
+
+%% API and Utility Classes
+    class ApiClient {
+        +API_BASE_URL: string
+        +apiRequest(endpoint, options)
+        +apiRequestWithRetry(endpoint, options, maxRetries)
+        +handleApiError(error, endpoint)
+        +logHeaders(headers)
+        +healthCheck()
+        +testCORS()
+    }
+
+    class SystemApi {
+        +getStatus()
+        +clearCache()
+        +cleanupCache()
+        +getCacheStats()
+    }
+
+    class JobsApi {
+        +getJobs(params)
+        +getJob(jobId)
+        +analyzeJob(jobUrl, status, apiKey)
+        +updateJobStatus(jobId, status)
+        +deleteJob(jobId, cascadeResumes)
+        +deleteJobsBatch(jobIds, cascadeResumes)
+        +getJobStats()
+        +getJobResumes(jobId)
+        +addJobByUrl(jobUrl, apiKey)
+    }
+
+    class ResumeApi {
+        +generateResume(jobId, settings, customize, template, handleExisting)
+        +getResumeStatus(resumeId)
+        +downloadResume(resumeId, format)
+        +getResumeYaml(resumeId)
+        +uploadResume(file, jobId)
+        +updateResumeYaml(resumeId, yamlContent)
+        +deleteResume(resumeId, updateJob)
+        +getUserResumes(params)
+        +getActiveResumeGenerations()
+        +pollResumeStatus(resumeId, maxAttempts, interval)
+        +saveResumeYaml(resumeId, yamlContent)
+    }
+
+    class SimplifyApi {
+        +storeTokens(tokens)
+        +checkSession()
+        +getStoredTokens()
+        +uploadResumeToSimplify(pdfBlob, resumeId, jobId)
+        +getCurrentUserId()
+    }
+
+%% Firebase Integration
+    class FirebaseConfig {
+        +initializeApp(config)
+        +getAuth()
+        +getFirestore()
+    }
+
+    class FirebaseAuth {
+        +createUserWithEmailAndPassword(auth, email, password)
+        +signInWithEmailAndPassword(auth, email, password)
+        +signOut(auth)
+        +onAuthStateChanged(auth, callback)
+    }
+
+    class Firestore {
+        +doc(db, collection, id)
+        +setDoc(docRef, data, options)
+        +getDoc(docRef)
+    }
+
+%% Data Models/Types
+    class Job {
+        +id: string
+        +title: string
+        +company: string
+        +location: string
+        +status: JobStatus
+        +date_found: Date
+        +applied_date: Date
+        +rejected_date: Date
+        +resume_id: string
+        +metadata: object
+        +job_url: string
+    }
+
+    class JobStatus {
+        <<enumeration>>
+        NEW
+        INTERESTED
+        RESUME_GENERATED
+        APPLIED
+        REJECTED
+        INTERVIEW
+        OFFER
+        DECLINED
+    }
+
+    class ResumeData {
+        +basic: BasicInfo
+        +objective: string
+        +education: Education[]
+        +experiences: Experience[]
+        +projects: Project[]
+        +skills: SkillCategory[]
+    }
+
+    class BasicInfo {
+        +name: string
+        +address: string
+        +email: string
+        +phone: string
+        +websites: string[]
+    }
+
+    class Experience {
+        +company: string
+        +location: string
+        +titles: JobTitle[]
+        +highlights: string[]
+        +skip_name: boolean
+    }
+
+    class JobTitle {
+        +name: string
+        +startdate: string
+        +enddate: string
+    }
+
+    class Project {
+        +name: string
+        +technologies: string
+        +link: string
+        +highlights: string[]
+        +hyperlink: boolean
+        +show_link: boolean
+    }
+
+    class SkillCategory {
+        +category: string
+        +skills: string[]
+    }
+
+    class Education {
+        +school: string
+        +degrees: Degree[]
+    }
+
+    class Degree {
+        +names: string[]
+        +gpa: string
+        +dates: string
+    }
+
+    class UserSettings {
+        +openaiApiKey: string
+        +settings: AppSettings
+        +email: string
+        +createdAt: string
+        +updatedAt: string
+    }
+
+    class AppSettings {
+        +selenium: SeleniumSettings
+        +cache: CacheSettings
+    }
+
+    class SeleniumSettings {
+        +headless: boolean
+    }
+
+    class CacheSettings {
+        +job_cache_size: number
+        +search_cache_size: number
+    }
+
+%% Relationships - App Structure
+    App --> AuthProvider : wraps
+    App --> PrivateRoute : uses
+    App --> Login : route
+    App --> Register : route
+    App --> Dashboard : route
+    App --> Settings : route
+
+%% Relationships - Authentication
+    AuthProvider --> FirebaseAuth : uses
+    AuthProvider --> Firestore : uses
+    PrivateRoute --> AuthProvider : consumes
+
+%% Relationships - Dashboard
+    Dashboard --> JobList : renders
+    Dashboard --> JobDetail : renders
+    Dashboard --> ResumeYamlModal : renders
+    Dashboard --> SimplifyUploadModal : renders
+    Dashboard --> Navbar : renders
+    Dashboard --> Footer : renders
+
+%% Relationships - Job Management
+    JobList --> Job : displays
+    JobDetail --> Job : displays
+    JobDetail --> ResumeStatusTracker : renders
+    JobSearch --> JobsApi : uses
+
+%% Relationships - Resume Management
+    ResumeYamlModal --> ResumeDocument : renders
+    ResumeYamlModal --> ResumeData : manages
+    SimplifyUploadModal --> ResumeDocument : generates
+    SimplifyUploadModal --> SimplifyApi : uses
+    ResumeStatusTracker --> ResumeApi : polls
+
+%% Relationships - API Layer
+    Dashboard --> JobsApi : fetches data
+    Dashboard --> ResumeApi : manages resumes
+    Dashboard --> SystemApi : system operations
+    JobDetail --> ResumeApi : generates resumes
+    Settings --> ResumeApi : manages resume data
+    Login --> AuthProvider : authenticates
+    Register --> AuthProvider : creates account
+    Register --> Firestore : stores resume
+
+%% Relationships - API Client
+    JobsApi --> ApiClient : extends
+    ResumeApi --> ApiClient : extends
+    SimplifyApi --> ApiClient : extends
+    SystemApi --> ApiClient : extends
+    ApiClient --> FirebaseAuth : gets user token
+
+%% Relationships - Data Models
+    Job --> JobStatus : has
+    ResumeData --> BasicInfo : contains
+    ResumeData --> Experience : contains
+    ResumeData --> Project : contains
+    ResumeData --> SkillCategory : contains
+    ResumeData --> Education : contains
+    Experience --> JobTitle : contains
+    Education --> Degree : contains
+    UserSettings --> AppSettings : contains
+    AppSettings --> SeleniumSettings : contains
+    AppSettings --> CacheSettings : contains
+
+%% Relationships - Firebase
+    AuthProvider --> FirebaseConfig : uses
+    FirebaseConfig --> FirebaseAuth : configures
+    FirebaseConfig --> Firestore : configures
+
+%% Relationships - Component Communication
+    JobList --> JobDetail : "job selection"
+    JobDetail --> ResumeYamlModal : "edit resume"
+    JobDetail --> SimplifyUploadModal : "upload to simplify"
+    ResumeYamlModal --> ResumeApi : "save changes"
+    SimplifyUploadModal --> ResumeApi : "fetch latest data"
+
+%% Relationships - State Management
+    Dashboard --> AuthProvider : "user context"
+    Settings --> AuthProvider : "user settings"
+    JobDetail --> AuthProvider : "user resume data"
+    ResumeYamlModal --> AuthProvider : "user context"
+
+%% Relationships - Navigation
+    Navbar --> AuthProvider : "logout function"
+    PrivateRoute --> Dashboard : "protects"
+    PrivateRoute --> Settings : "protects"
+
+    note for Dashboard "Central component managing\njob list, job details,\nand modal interactions"
+    note for ResumeYamlModal "Full-featured resume editor\nwith tabbed interface\nand live PDF preview"
+    note for SimplifyUploadModal "Handles authentication flow\nand secure PDF upload\nto Simplify.jobs platform"
+    note for ApiClient "Centralized API communication\nwith authentication,\nretry logic, and error handling"
+    note for AuthProvider "Firebase-based authentication\nwith persistent state\nand user settings management"
