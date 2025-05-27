@@ -107,17 +107,20 @@ const ResumeDocument = ({ data }) => {
 
         {/* Education Section */}
         {data.education && data.education.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Education</Text>
-            {data.education.map((edu, idx) => (
-              <View key={idx} style={styles.jobBlock}>
-                <View style={styles.row}>
-                  <Text style={{ fontWeight: 'bold' }}>{edu.school}, {edu.degrees?.[0]?.names?.join(', ')}</Text>
-                  <Text>{edu.degrees?.[0]?.dates}</Text>
-                </View>
-              </View>
-            ))}
-          </>
+            <>
+              <Text style={styles.sectionTitle}>Education</Text>
+              {data.education.map((edu, idx) => (
+                  <View key={idx} style={styles.jobBlock}>
+                    <View style={styles.row}>
+                      <Text style={{ fontWeight: 'bold' }}>
+                        {edu.school}, {edu.degrees?.[0]?.names?.join(', ')}
+                        {edu.degrees?.[0]?.gpa && ` (GPA: ${edu.degrees?.[0]?.gpa})`}
+                      </Text>
+                      <Text>{edu.degrees?.[0]?.dates}</Text>
+                    </View>
+                  </View>
+              ))}
+            </>
         )}
 
         {/* Skills Section */}
