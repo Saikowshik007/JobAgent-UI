@@ -1,4 +1,4 @@
-// ResumeYamlModal.js - Fixed with technologies display and preview refresh
+// ResumeYamlModal.js - Enhanced with drag and drop functionality
 import React, { useState, useEffect, useRef } from 'react';
 import yaml from 'js-yaml';
 import { Document, Page, Text, View, StyleSheet, PDFViewer, Font, Link } from '@react-pdf/renderer';
@@ -157,6 +157,15 @@ const ResumeDocument = ({ data }) => {
   );
 };
 
+// Drag Handle Component
+const DragHandle = () => (
+    <div className="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing">
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
+      </svg>
+    </div>
+);
+
 // Delete button component for consistency
 const DeleteButton = ({ onClick }) => (
     <button
@@ -171,6 +180,22 @@ const DeleteButton = ({ onClick }) => (
     </button>
 );
 
+// Draggable Item Component
+const DraggableItem = ({ children, onDragStart, onDragEnd, onDragOver, onDrop, isDragging, className = "" }) => {
+  return (
+      <div
+          draggable
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          className={`${className} ${isDragging ? 'opacity-50' : ''} transition-opacity duration-200`}
+      >
+        {children}
+      </div>
+  );
+};
+
 const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
   const [resumeData, setResumeData] = useState(null);
   const [activeTab, setActiveTab] = useState("basic");
@@ -179,6 +204,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
   const [yamlString, setYamlString] = useState('');
   const [includeObjective, setIncludeObjective] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
+  const [draggedItem, setDraggedItem] = useState(null);
 
   useEffect(() => {
     if (yamlContent) {
@@ -206,6 +232,96 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
     } catch (err) {
       console.error("Error generating YAML:", err);
     }
+  };
+
+  // Drag and drop handlers for array reordering
+  const handleDragStart = (e, type, sectionIndex, itemIndex = null) => {
+    setDraggedItem({ type, sectionIndex, itemIndex });
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, type, targetSectionIndex, targetItemIndex = null) => {
+    e.preventDefault();
+
+    if (!draggedItem || draggedItem.type !== type) return;
+
+    const { sectionIndex: sourceSectionIndex, itemIndex: sourceItemIndex } = draggedItem;
+
+    // Don't do anything if dropping on the same position
+    if (sourceSectionIndex === targetSectionIndex && sourceItemIndex === targetItemIndex) {
+      return;
+    }
+
+    const newData = { ...resumeData };
+
+    if (type === 'experience') {
+      if (sourceItemIndex !== null && targetItemIndex !== null) {
+        // Reordering highlights within the same experience
+        if (sourceSectionIndex === targetSectionIndex) {
+          const highlights = [...newData.experiences[sourceSectionIndex].highlights];
+          const [removed] = highlights.splice(sourceItemIndex, 1);
+          highlights.splice(targetItemIndex, 0, removed);
+          newData.experiences[sourceSectionIndex].highlights = highlights;
+        }
+      } else {
+        // Reordering experiences
+        const experiences = [...newData.experiences];
+        const [removed] = experiences.splice(sourceSectionIndex, 1);
+        experiences.splice(targetSectionIndex, 0, removed);
+        newData.experiences = experiences;
+      }
+    } else if (type === 'project') {
+      if (sourceItemIndex !== null && targetItemIndex !== null) {
+        // Reordering project highlights
+        if (sourceSectionIndex === targetSectionIndex) {
+          const highlights = [...newData.projects[sourceSectionIndex].highlights];
+          const [removed] = highlights.splice(sourceItemIndex, 1);
+          highlights.splice(targetItemIndex, 0, removed);
+          newData.projects[sourceSectionIndex].highlights = highlights;
+        }
+      } else {
+        // Reordering projects
+        const projects = [...newData.projects];
+        const [removed] = projects.splice(sourceSectionIndex, 1);
+        projects.splice(targetSectionIndex, 0, removed);
+        newData.projects = projects;
+      }
+    } else if (type === 'education') {
+      // Reordering education entries
+      const education = [...newData.education];
+      const [removed] = education.splice(sourceSectionIndex, 1);
+      education.splice(targetSectionIndex, 0, removed);
+      newData.education = education;
+    } else if (type === 'skill') {
+      if (sourceItemIndex !== null && targetItemIndex !== null) {
+        // Reordering skills within category
+        if (sourceSectionIndex === targetSectionIndex) {
+          const skills = [...newData.skills[sourceSectionIndex].skills];
+          const [removed] = skills.splice(sourceItemIndex, 1);
+          skills.splice(targetItemIndex, 0, removed);
+          newData.skills[sourceSectionIndex].skills = skills;
+        }
+      } else {
+        // Reordering skill categories
+        const skills = [...newData.skills];
+        const [removed] = skills.splice(sourceSectionIndex, 1);
+        skills.splice(targetSectionIndex, 0, removed);
+        newData.skills = skills;
+      }
+    }
+
+    setResumeData(newData);
+    updateYamlString(newData);
+    setDraggedItem(null);
   };
 
   // Basic information handlers
@@ -659,56 +775,6 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
             <div className="border-b border-gray-200 mb-6">
               <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                 <button
-                    onClick={() => setActiveTab("basic")}
-                    className={`${
-                        activeTab === "basic"
-                            ? "border-indigo-500 text-indigo-600"
-                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                    } whitespace-nowrap py-3 px-2 border-b-2 font-medium text-base`}
-                >
-                  Basic Info
-                </button>
-                <button
-                    onClick={() => setActiveTab("objective")}
-                    className={`${
-                        activeTab === "objective"
-                            ? "border-indigo-500 text-indigo-600"
-                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                    } whitespace-nowrap py-3 px-2 border-b-2 font-medium text-base`}
-                >
-                  Professional Summary
-                </button>
-                <button
-                    onClick={() => setActiveTab("education")}
-                    className={`${
-                        activeTab === "education"
-                            ? "border-indigo-500 text-indigo-600"
-                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                    } whitespace-nowrap py-3 px-2 border-b-2 font-medium text-base`}
-                >
-                  Education
-                </button>
-                <button
-                    onClick={() => setActiveTab("experience")}
-                    className={`${
-                        activeTab === "experience"
-                            ? "border-indigo-500 text-indigo-600"
-                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                    } whitespace-nowrap py-3 px-2 border-b-2 font-medium text-base`}
-                >
-                  Experience
-                </button>
-                <button
-                    onClick={() => setActiveTab("projects")}
-                    className={`${
-                        activeTab === "projects"
-                            ? "border-indigo-500 text-indigo-600"
-                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                    } whitespace-nowrap py-3 px-2 border-b-2 font-medium text-base`}
-                >
-                  Projects
-                </button>
-                <button
                     onClick={() => setActiveTab("skills")}
                     className={`${
                         activeTab === "skills"
@@ -891,7 +957,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                           </div>
                       )}
 
-                      {/* Education */}
+                      {/* Education - Enhanced with drag & drop */}
                       {activeTab === "education" && (
                           <div className="space-y-8">
                             <div className="flex justify-between items-center">
@@ -905,8 +971,25 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                               </button>
                             </div>
 
+                            {(resumeData.education || []).length > 1 && (
+                                <div className="text-sm text-gray-500 bg-blue-50 p-3 rounded-lg">
+                                  💡 Tip: Drag the grip handle (⋮⋮) to reorder your education entries
+                                </div>
+                            )}
+
                             {(resumeData.education || []).map((school, schoolIndex) => (
-                                <div key={schoolIndex} className="mt-8 p-6 border border-gray-200 rounded-lg relative">
+                                <DraggableItem
+                                    key={schoolIndex}
+                                    onDragStart={(e) => handleDragStart(e, 'education', schoolIndex)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragOver={handleDragOver}
+                                    onDrop={(e) => handleDrop(e, 'education', schoolIndex)}
+                                    isDragging={draggedItem?.type === 'education' && draggedItem?.sectionIndex === schoolIndex}
+                                    className="mt-8 p-6 border border-gray-200 rounded-lg relative bg-white hover:shadow-md transition-shadow"
+                                >
+                                  <div className="absolute top-4 left-4">
+                                    <DragHandle />
+                                  </div>
                                   <button
                                       type="button"
                                       onClick={() => removeEducation(schoolIndex)}
@@ -916,7 +999,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                   </button>
-                                  <div>
+                                  <div className="ml-12">
                                     <label className="block text-base font-medium text-gray-700 mb-3">
                                       School/University
                                     </label>
@@ -929,7 +1012,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                   </div>
 
                                   {(school.degrees || []).map((degree, degreeIndex) => (
-                                      <div key={degreeIndex} className="mt-8 pl-6 border-l-2 border-gray-200">
+                                      <div key={degreeIndex} className="mt-8 ml-12 pl-6 border-l-2 border-gray-200">
                                         <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-6">
                                           <div>
                                             <label className="block text-base font-medium text-gray-700 mb-3">
@@ -969,12 +1052,12 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                         </div>
                                       </div>
                                   ))}
-                                </div>
+                                </DraggableItem>
                             ))}
                           </div>
                       )}
 
-                      {/* Experience */}
+                      {/* Experience - Enhanced with drag & drop */}
                       {activeTab === "experience" && (
                           <div className="space-y-8">
                             <div className="flex justify-between items-center">
@@ -988,8 +1071,25 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                               </button>
                             </div>
 
+                            {(resumeData.experiences || []).length > 1 && (
+                                <div className="text-sm text-gray-500 bg-blue-50 p-3 rounded-lg">
+                                  💡 Tip: Drag the grip handle (⋮⋮) to reorder your work experiences and highlights
+                                </div>
+                            )}
+
                             {(resumeData.experiences || []).map((exp, expIndex) => (
-                                <div key={expIndex} className="mt-8 p-6 border border-gray-200 rounded-lg relative">
+                                <DraggableItem
+                                    key={expIndex}
+                                    onDragStart={(e) => handleDragStart(e, 'experience', expIndex)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragOver={handleDragOver}
+                                    onDrop={(e) => handleDrop(e, 'experience', expIndex)}
+                                    isDragging={draggedItem?.type === 'experience' && draggedItem?.sectionIndex === expIndex && draggedItem?.itemIndex === null}
+                                    className="mt-8 p-6 border border-gray-200 rounded-lg relative bg-white hover:shadow-md transition-shadow"
+                                >
+                                  <div className="absolute top-4 left-4">
+                                    <DragHandle />
+                                  </div>
                                   <button
                                       type="button"
                                       onClick={() => removeExperience(expIndex)}
@@ -999,210 +1099,121 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                   </button>
-                                  <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-6">
-                                    <div>
-                                      <label className="block text-base font-medium text-gray-700 mb-3">
-                                        Company
-                                      </label>
-                                      <input
-                                          type="text"
-                                          className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
-                                          value={exp.company || ""}
-                                          onChange={(e) => handleExperienceChange(expIndex, 'company', e.target.value)}
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-base font-medium text-gray-700 mb-3">
-                                        Location
-                                      </label>
-                                      <input
-                                          type="text"
-                                          className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
-                                          value={exp.location || ""}
-                                          onChange={(e) => handleExperienceChange(expIndex, 'location', e.target.value)}
-                                      />
-                                    </div>
-                                  </div>
-
-                                  {(exp.titles || []).map((title, titleIndex) => (
-                                      <div key={titleIndex} className="mt-6">
-                                        <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-3 sm:gap-x-6">
-                                          <div className="sm:col-span-1">
-                                            <label className="block text-base font-medium text-gray-700 mb-3">
-                                              Job Title
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
-                                                value={title.name || title.title || ""}
-                                                onChange={(e) => handleTitleChange(expIndex, titleIndex, 'name', e.target.value)}
-                                            />
-                                          </div>
-                                          <div className="sm:col-span-1">
-                                            <label className="block text-base font-medium text-gray-700 mb-3">
-                                              Start Date
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
-                                                value={title.startdate || ""}
-                                                onChange={(e) => handleTitleChange(expIndex, titleIndex, 'startdate', e.target.value)}
-                                                placeholder="January 2023"
-                                            />
-                                          </div>
-                                          <div className="sm:col-span-1">
-                                            <label className="block text-base font-medium text-gray-700 mb-3">
-                                              End Date
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
-                                                value={title.enddate || ""}
-                                                onChange={(e) => handleTitleChange(expIndex, titleIndex, 'enddate', e.target.value)}
-                                                placeholder="Present"
-                                            />
-                                          </div>
-                                        </div>
+                                  <div className="ml-12">
+                                    <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-6">
+                                      <div>
+                                        <label className="block text-base font-medium text-gray-700 mb-3">
+                                          Company
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                            value={exp.company || ""}
+                                            onChange={(e) => handleExperienceChange(expIndex, 'company', e.target.value)}
+                                        />
                                       </div>
-                                  ))}
+                                      <div>
+                                        <label className="block text-base font-medium text-gray-700 mb-3">
+                                          Location
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                            value={exp.location || ""}
+                                            onChange={(e) => handleExperienceChange(expIndex, 'location', e.target.value)}
+                                        />
+                                      </div>
+                                    </div>
 
-                                  <div className="mt-8">
-                                    <label className="block text-base font-medium text-gray-700 mb-4">
-                                      Highlights/Responsibilities
-                                    </label>
-                                    {(exp.highlights || []).map((highlight, highlightIndex) => (
-                                        <div key={highlightIndex} className="mt-4 flex items-start">
-                                <textarea
-                                    rows={4}
-                                    className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full text-base border border-gray-300 rounded-lg p-4"
-                                    value={highlight}
-                                    onChange={(e) => handleHighlightChange(expIndex, highlightIndex, e.target.value)}
-                                    placeholder="Describe an achievement or responsibility"
-                                />
-                                          <DeleteButton onClick={() => removeHighlight(expIndex, highlightIndex)} />
+                                    {(exp.titles || []).map((title, titleIndex) => (
+                                        <div key={titleIndex} className="mt-6">
+                                          <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-3 sm:gap-x-6">
+                                            <div className="sm:col-span-1">
+                                              <label className="block text-base font-medium text-gray-700 mb-3">
+                                                Job Title
+                                              </label>
+                                              <input
+                                                  type="text"
+                                                  className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                                  value={title.name || title.title || ""}
+                                                  onChange={(e) => handleTitleChange(expIndex, titleIndex, 'name', e.target.value)}
+                                              />
+                                            </div>
+                                            <div className="sm:col-span-1">
+                                              <label className="block text-base font-medium text-gray-700 mb-3">
+                                                Start Date
+                                              </label>
+                                              <input
+                                                  type="text"
+                                                  className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                                  value={title.startdate || ""}
+                                                  onChange={(e) => handleTitleChange(expIndex, titleIndex, 'startdate', e.target.value)}
+                                                  placeholder="January 2023"
+                                              />
+                                            </div>
+                                            <div className="sm:col-span-1">
+                                              <label className="block text-base font-medium text-gray-700 mb-3">
+                                                End Date
+                                              </label>
+                                              <input
+                                                  type="text"
+                                                  className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                                  value={title.enddate || ""}
+                                                  onChange={(e) => handleTitleChange(expIndex, titleIndex, 'enddate', e.target.value)}
+                                                  placeholder="Present"
+                                              />
+                                            </div>
+                                          </div>
                                         </div>
                                     ))}
-                                    <button
-                                        type="button"
-                                        onClick={() => addHighlight(expIndex)}
-                                        className="mt-4 inline-flex items-center px-5 py-3 border border-transparent text-base leading-4 font-medium rounded-lg text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                    >
-                                      + Add Highlight
-                                    </button>
-                                  </div>
-                                </div>
-                            ))}
-                          </div>
-                      )}
 
-                      {/* Projects - Enhanced with better technologies display */}
-                      {activeTab === "projects" && (
-                          <div className="space-y-8">
-                            <div className="flex justify-between items-center">
-                              <h4 className="text-2xl font-medium text-gray-900">Projects</h4>
-                              <button
-                                  type="button"
-                                  onClick={addProject}
-                                  className="inline-flex items-center px-5 py-3 border border-transparent text-base leading-4 font-medium rounded-lg text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                              >
-                                + Add Project
-                              </button>
-                            </div>
-
-                            {(resumeData.projects || []).map((project, projIndex) => (
-                                <div key={projIndex} className="mt-8 p-6 border border-gray-200 rounded-lg relative">
-                                  <button
-                                      type="button"
-                                      onClick={() => removeProject(projIndex)}
-                                      className="absolute top-4 right-4 text-red-500 hover:text-red-700"
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </button>
-
-                                  {/* Preview of how it will look in PDF */}
-                                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
-                                    <div className="text-sm text-gray-600 mb-2">Preview:</div>
-                                    <div className="flex items-baseline flex-wrap">
-                                      <span className="font-bold text-blue-600">{project.name || "Project Name"}</span>
-                                      {project.technologies && project.technologies.trim() && (
-                                          <span className="text-xs text-gray-500 italic ml-2">({project.technologies})</span>
+                                    <div className="mt-8">
+                                      <label className="block text-base font-medium text-gray-700 mb-4">
+                                        Project Highlights
+                                      </label>
+                                      {(project.highlights || []).length > 1 && (
+                                          <div className="text-xs text-gray-500 mb-3">
+                                            Drag to reorder highlights
+                                          </div>
                                       )}
+                                      {(project.highlights || []).map((highlight, highlightIndex) => (
+                                          <DraggableItem
+                                              key={highlightIndex}
+                                              onDragStart={(e) => handleDragStart(e, 'project', projIndex, highlightIndex)}
+                                              onDragEnd={handleDragEnd}
+                                              onDragOver={handleDragOver}
+                                              onDrop={(e) => handleDrop(e, 'project', projIndex, highlightIndex)}
+                                              isDragging={draggedItem?.type === 'project' && draggedItem?.sectionIndex === projIndex && draggedItem?.itemIndex === highlightIndex}
+                                              className="mt-4 flex items-start bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors"
+                                          >
+                                            <div className="mr-3 mt-2">
+                                              <DragHandle />
+                                            </div>
+                                            <textarea
+                                                rows={4}
+                                                className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 flex-1 block w-full text-base border border-gray-300 rounded-lg p-4"
+                                                value={highlight}
+                                                onChange={(e) => handleProjectHighlightChange(projIndex, highlightIndex, e.target.value)}
+                                                placeholder="Describe what you accomplished with this project"
+                                            />
+                                            <DeleteButton onClick={() => removeProjectHighlight(projIndex, highlightIndex)} />
+                                          </DraggableItem>
+                                      ))}
+                                      <button
+                                          type="button"
+                                          onClick={() => addProjectHighlight(projIndex)}
+                                          className="mt-4 inline-flex items-center px-5 py-3 border border-transparent text-base leading-4 font-medium rounded-lg text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                      >
+                                        + Add Highlight
+                                      </button>
                                     </div>
                                   </div>
-
-                                  <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-6">
-                                    <div>
-                                      <label className="block text-base font-medium text-gray-700 mb-3">
-                                        Project Name
-                                      </label>
-                                      <input
-                                          type="text"
-                                          className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
-                                          value={project.name || ""}
-                                          onChange={(e) => handleProjectChange(projIndex, 'name', e.target.value)}
-                                          placeholder="e.g., JobAgent AI Platform"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-base font-medium text-gray-700 mb-3">
-                                        Technologies Used
-                                        <span className="text-sm text-gray-500 block font-normal">Will appear in italics next to project name</span>
-                                      </label>
-                                      <input
-                                          type="text"
-                                          className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
-                                          value={project.technologies || ""}
-                                          onChange={(e) => handleProjectChange(projIndex, 'technologies', e.target.value)}
-                                          placeholder="e.g., React, FastAPI, PostgreSQL, OpenAI GPT-4"
-                                      />
-                                    </div>
-                                    <div className="sm:col-span-2">
-                                      <label className="block text-base font-medium text-gray-700 mb-3">
-                                        Project Link (Optional)
-                                        <span className="text-sm text-gray-500 block font-normal">Will make project name clickable in PDF</span>
-                                      </label>
-                                      <input
-                                          type="text"
-                                          className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
-                                          value={project.link || ""}
-                                          onChange={(e) => handleProjectChange(projIndex, 'link', e.target.value)}
-                                          placeholder="https://github.com/yourusername/project"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="mt-8">
-                                    <label className="block text-base font-medium text-gray-700 mb-4">
-                                      Project Highlights
-                                    </label>
-                                    {(project.highlights || []).map((highlight, highlightIndex) => (
-                                        <div key={highlightIndex} className="mt-4 flex items-start">
-                                <textarea
-                                    rows={4}
-                                    className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full text-base border border-gray-300 rounded-lg p-4"
-                                    value={highlight}
-                                    onChange={(e) => handleProjectHighlightChange(projIndex, highlightIndex, e.target.value)}
-                                    placeholder="Describe what you accomplished with this project"
-                                />
-                                          <DeleteButton onClick={() => removeProjectHighlight(projIndex, highlightIndex)} />
-                                        </div>
-                                    ))}
-                                    <button
-                                        type="button"
-                                        onClick={() => addProjectHighlight(projIndex)}
-                                        className="mt-4 inline-flex items-center px-5 py-3 border border-transparent text-base leading-4 font-medium rounded-lg text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                    >
-                                      + Add Highlight
-                                    </button>
-                                  </div>
-                                </div>
+                                </DraggableItem>
                             ))}
                           </div>
                       )}
 
-                      {/* Skills */}
+                      {/* Skills - Enhanced with drag & drop */}
                       {activeTab === "skills" && (
                           <div className="space-y-8">
                             <div className="flex justify-between items-center">
@@ -1216,8 +1227,25 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                               </button>
                             </div>
 
+                            {(resumeData.skills || []).length > 1 && (
+                                <div className="text-sm text-gray-500 bg-blue-50 p-3 rounded-lg">
+                                  💡 Tip: Drag the grip handle (⋮⋮) to reorder skill categories and individual skills
+                                </div>
+                            )}
+
                             {(resumeData.skills || []).map((skillCat, catIndex) => (
-                                <div key={catIndex} className="mt-8 p-6 border border-gray-200 rounded-lg relative">
+                                <DraggableItem
+                                    key={catIndex}
+                                    onDragStart={(e) => handleDragStart(e, 'skill', catIndex)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragOver={handleDragOver}
+                                    onDrop={(e) => handleDrop(e, 'skill', catIndex)}
+                                    isDragging={draggedItem?.type === 'skill' && draggedItem?.sectionIndex === catIndex && draggedItem?.itemIndex === null}
+                                    className="mt-8 p-6 border border-gray-200 rounded-lg relative bg-white hover:shadow-md transition-shadow"
+                                >
+                                  <div className="absolute top-4 left-4">
+                                    <DragHandle />
+                                  </div>
                                   <button
                                       type="button"
                                       onClick={() => removeSkillCategory(catIndex)}
@@ -1227,7 +1255,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                   </button>
-                                  <div>
+                                  <div className="ml-12">
                                     <label className="block text-base font-medium text-gray-700 mb-3">
                                       Skill Category
                                     </label>
@@ -1240,22 +1268,38 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                     />
                                   </div>
 
-                                  <div className="mt-6">
+                                  <div className="mt-6 ml-12">
                                     <label className="block text-base font-medium text-gray-700 mb-4">
                                       Skills
                                     </label>
-                                    <div className="mt-2 grid grid-cols-1 gap-y-4 sm:grid-cols-2 sm:gap-x-4">
+                                    {(skillCat.skills || []).length > 1 && (
+                                        <div className="text-xs text-gray-500 mb-3">
+                                          Drag to reorder skills
+                                        </div>
+                                    )}
+                                    <div className="space-y-3">
                                       {(skillCat.skills || []).map((skill, skillIndex) => (
-                                          <div key={skillIndex} className="flex items-center">
+                                          <DraggableItem
+                                              key={skillIndex}
+                                              onDragStart={(e) => handleDragStart(e, 'skill', catIndex, skillIndex)}
+                                              onDragEnd={handleDragEnd}
+                                              onDragOver={handleDragOver}
+                                              onDrop={(e) => handleDrop(e, 'skill', catIndex, skillIndex)}
+                                              isDragging={draggedItem?.type === 'skill' && draggedItem?.sectionIndex === catIndex && draggedItem?.itemIndex === skillIndex}
+                                              className="flex items-center bg-gray-50 rounded-lg p-2 hover:bg-gray-100 transition-colors"
+                                          >
+                                            <div className="mr-3">
+                                              <DragHandle />
+                                            </div>
                                             <input
                                                 type="text"
-                                                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                                className="focus:ring-indigo-500 focus:border-indigo-500 flex-1 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
                                                 value={skill}
                                                 onChange={(e) => handleSkillChange(catIndex, skillIndex, e.target.value)}
                                                 placeholder="Enter a skill"
                                             />
                                             <DeleteButton onClick={() => removeSkill(catIndex, skillIndex)} />
-                                          </div>
+                                          </DraggableItem>
                                       ))}
                                     </div>
                                     <button
@@ -1266,7 +1310,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                       + Add Skill
                                     </button>
                                   </div>
-                                </div>
+                                </DraggableItem>
                             ))}
                           </div>
                       )}
