@@ -658,7 +658,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 } whitespace-nowrap py-3 px-2 border-b-2 font-medium text-base`}
               >
-                Objective
+                Professional Summary
               </button>
               <button
                 onClick={() => setActiveTab("education")}
