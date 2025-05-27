@@ -1,14 +1,12 @@
-// JobDetail.js - Fixed version with complete state reset on job change
+// Updated JobDetail.js - Modal handling moved to Dashboard
 import React, { useState, useEffect, useRef } from 'react';
 import { jobsApi, resumeApi } from '../utils/api';
 import ResumeStatusTracker from './ResumeStatusTracker';
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import ResumeYamlModal from './ResumeYamlModal';
-import SimplifyUploadModal from './SimplifyUploadModal';
 
-function JobDetail({ job, onStatusChange, onDeleteJob }) {
+function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSimplifyModal, resumeYamlVersion }) {
   const [generatingResume, setGeneratingResume] = useState(false);
   const [resumeError, setResumeError] = useState('');
   const [resumeMessage, setResumeMessage] = useState('');
@@ -16,19 +14,14 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
   const [resumeId, setResumeId] = useState(job.resume_id || null);
   const [showStatusTracker, setShowStatusTracker] = useState(false);
   const [userResumeData, setUserResumeData] = useState(null);
-  const [resumeYaml, setResumeYaml] = useState(null);
-  const [showYamlModal, setShowYamlModal] = useState(false);
   const [expandedDescription, setExpandedDescription] = useState(false);
-  const [fetchingYamlForModal, setFetchingYamlForModal] = useState(false);
-  const [showSimplifyModal, setShowSimplifyModal] = useState(false);
-  const [resumeYamlVersion, setResumeYamlVersion] = useState(0); // Track YAML changes
+  const [statusChanging, setStatusChanging] = useState(false);
+  const [lastStatusChange, setLastStatusChange] = useState(null);
 
   const { currentUser, getUserSettings } = useAuth();
-  const fetchingYaml = useRef(false);
-  const yamlFetched = useRef(false);
   const currentJobId = useRef(job.id);
 
-  // COMPLETE state reset when job changes - this is the key fix
+  // COMPLETE state reset when job changes
   useEffect(() => {
     if (currentJobId.current !== job.id) {
       console.log(`Job changed from ${currentJobId.current} to ${job.id} - resetting ALL state`);
@@ -39,18 +32,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
       setResumeMessage('');
       setUploadingToSimplify(false);
       setShowStatusTracker(false);
-      setFetchingYamlForModal(false);
       setExpandedDescription(false);
-
-      // Reset modal states
-      setShowYamlModal(false);
-      setShowSimplifyModal(false);
-
-      // Reset YAML-related state completely
-      setResumeYaml(null);
-      setResumeYamlVersion(0);
-      yamlFetched.current = false;
-      fetchingYaml.current = false;
 
       // Update the job ID tracker
       currentJobId.current = job.id;
@@ -82,93 +64,6 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
     fetchUserResume();
   }, [currentUser]);
 
-  // Fetch YAML only when resume is actually completed (not during generation)
-  useEffect(() => {
-    console.log('Checking if should fetch YAML:', {
-      resumeId,
-      status: job.status,
-      hasYaml: !!resumeYaml,
-      yamlFetched: yamlFetched.current,
-      fetching: fetchingYaml.current,
-      showStatusTracker,
-      jobId: job.id
-    });
-
-    // Only fetch YAML if:
-    // 1. We have a resumeId
-    // 2. Job status is RESUME_GENERATED
-    // 3. We don't already have YAML
-    // 4. We haven't already fetched it
-    // 5. We're not currently fetching it
-    // 6. Status tracker is NOT showing (meaning generation is complete)
-    if (resumeId &&
-        job.status === 'RESUME_GENERATED' &&
-        !resumeYaml &&
-        !yamlFetched.current &&
-        !fetchingYaml.current &&
-        !showStatusTracker) {
-      console.log('Conditions met - fetching YAML for completed job', job.id);
-      fetchResumeYaml();
-    }
-  }, [resumeId, job.status, resumeYaml, showStatusTracker, job.id]);
-
-  const fetchResumeYaml = async () => {
-    if (fetchingYaml.current || yamlFetched.current) {
-      console.log('Skipping YAML fetch - already fetching or fetched');
-      return;
-    }
-
-    try {
-      fetchingYaml.current = true;
-      console.log('Fetching resume YAML for resumeId:', resumeId, 'jobId:', job.id);
-
-      const yamlContent = await resumeApi.getResumeYaml(resumeId);
-      if (yamlContent) {
-        setResumeYaml(yamlContent);
-        setResumeYamlVersion(prev => prev + 1); // Increment version when YAML is fetched
-        yamlFetched.current = true;
-        console.log('Resume YAML fetched successfully for job', job.id);
-      }
-    } catch (error) {
-      console.error('Error fetching resume YAML:', error);
-      setResumeError(`Failed to fetch resume YAML: ${error.message}`);
-    } finally {
-      fetchingYaml.current = false;
-    }
-  };
-
-  const handleViewEditResume = async () => {
-    try {
-      if (resumeYaml) {
-        setShowYamlModal(true);
-        return;
-      }
-
-      if (resumeId && !fetchingYamlForModal) {
-        setFetchingYamlForModal(true);
-        setResumeError('');
-
-        console.log('Fetching resume YAML for modal, resumeId:', resumeId);
-
-        const yamlContent = await resumeApi.getResumeYaml(resumeId);
-        if (yamlContent) {
-          setResumeYaml(yamlContent);
-          setResumeYamlVersion(prev => prev + 1); // Increment version
-          yamlFetched.current = true;
-          setShowYamlModal(true);
-          console.log('Resume YAML fetched successfully for modal');
-        } else {
-          setResumeError('Failed to fetch resume content');
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching resume YAML for modal:', error);
-      setResumeError(`Failed to fetch resume: ${error.message}`);
-    } finally {
-      setFetchingYamlForModal(false);
-    }
-  };
-
   // Updated to match the API's JobStatusEnum values
   const statusOptions = [
     { value: 'NEW', label: 'New' },
@@ -181,17 +76,28 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
     { value: 'DECLINED', label: 'Declined' }
   ];
 
+  const getStatusColors = (status) => {
+    switch (status) {
+      case "NEW": return { bg: "bg-gray-100", text: "text-gray-800", ring: "ring-gray-300" };
+      case "INTERESTED": return { bg: "bg-blue-100", text: "text-blue-800", ring: "ring-blue-300" };
+      case "RESUME_GENERATED": return { bg: "bg-purple-100", text: "text-purple-800", ring: "ring-purple-300" };
+      case "APPLIED": return { bg: "bg-yellow-100", text: "text-yellow-800", ring: "ring-yellow-300" };
+      case "INTERVIEW": return { bg: "bg-indigo-100", text: "text-indigo-800", ring: "ring-indigo-300" };
+      case "OFFER": return { bg: "bg-green-100", text: "text-green-800", ring: "ring-green-300" };
+      case "REJECTED": return { bg: "bg-red-100", text: "text-red-800", ring: "ring-red-300" };
+      case "DECLINED": return { bg: "bg-orange-100", text: "text-orange-800", ring: "ring-orange-300" };
+      default: return { bg: "bg-gray-100", text: "text-gray-800", ring: "ring-gray-300" };
+    }
+  };
+
+  const currentStatusColors = getStatusColors(job.status);
+
   const handleGenerateResume = async () => {
     try {
       setGeneratingResume(true);
       setResumeError('');
       setResumeMessage('');
       setShowStatusTracker(false);
-
-      // Reset YAML state for new resume generation
-      setResumeYaml(null);
-      setResumeYamlVersion(0);
-      yamlFetched.current = false;
 
       if (!userResumeData) {
         throw new Error("Your resume data is not available. Please update your resume in Settings.");
@@ -221,13 +127,16 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
     }
   };
 
-  const handleUploadToSimplify = () => {
-    setShowSimplifyModal(true);
+  const handleViewEditResume = () => {
+    if (resumeId) {
+      onShowYamlModal(resumeId);
+    }
   };
 
-  const handleSimplifyUploadComplete = (result) => {
-    setResumeMessage('Resume uploaded to Simplify successfully!');
-    setShowSimplifyModal(false);
+  const handleUploadToSimplify = () => {
+    if (resumeId) {
+      onShowSimplifyModal(resumeId);
+    }
   };
 
   const handleResumeComplete = async (resumeData) => {
@@ -238,29 +147,26 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
     if (job.status !== 'RESUME_GENERATED') {
       onStatusChange(job.id, 'RESUME_GENERATED');
     }
-
-    // Now that generation is complete, we can fetch the YAML
-    // Give it a moment for the backend to finish writing the file
-    setTimeout(() => {
-      if (!resumeYaml && !yamlFetched.current) {
-        console.log('Resume completed - fetching YAML after brief delay');
-        fetchResumeYaml();
-      }
-    }, 1000); // 1 second delay to ensure file is ready
   };
 
-  const handleSaveYaml = async (yamlContent, parsedData) => {
-    try {
-      setResumeError('');
-      setResumeMessage('Saving resume changes...');
+  // Enhanced status change handler with animation
+  const handleStatusChange = async (newStatus) => {
+    if (newStatus === job.status) return;
 
-      await resumeApi.updateResumeYaml(resumeId, yamlContent);
-      setResumeYaml(yamlContent);
-      setResumeYamlVersion(prev => prev + 1); // Increment version when YAML is updated
-      setResumeMessage('Resume updated successfully!');
+    setStatusChanging(true);
+    setLastStatusChange(newStatus);
+
+    try {
+      await onStatusChange(job.id, newStatus);
+
+      // Show success animation
+      setTimeout(() => {
+        setLastStatusChange(null);
+      }, 2000);
     } catch (error) {
-      console.error('Error saving resume YAML:', error);
-      setResumeError(`Failed to save resume: ${error.message}`);
+      setResumeError('Failed to update status: ' + error.message);
+    } finally {
+      setStatusChanging(false);
     }
   };
 
@@ -309,211 +215,330 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
   const getSalary = () => metadata.salary || 'Not specified';
   const description = job.description || metadata.job_summary || "No description available";
 
-  const formatSkillsList = (skills) => {
-    if (!skills || skills.length === 0) return "None listed";
-    return skills.join(", ");
-  };
-
   return (
-    <div className="bg-white shadow rounded-lg">
-      {/* Job Header */}
-      <div className="px-6 py-5 border-b border-gray-200 flex flex-wrap justify-between items-center gap-4">
-        <div className="flex-grow">
-          <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
-          <p className="mt-1 text-md text-gray-700">{company}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            className="block pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-            value={job.status || 'NEW'}
-            onChange={(e) => onStatusChange(job.id, e.target.value)}
-          >
-            {statusOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+    <div className="bg-white/80 backdrop-blur-lg shadow-xl rounded-2xl border border-white/20 overflow-hidden">
+      {/* Enhanced Job Header */}
+      <div className="relative px-6 py-6 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-b border-gray-200">
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-pink-500/5"></div>
+        <div className="relative flex flex-wrap justify-between items-center gap-4">
+          <div className="flex-grow">
+            <h3 className="text-2xl font-bold text-gray-900">{title}</h3>
+            <p className="mt-1 text-lg text-gray-700 font-medium">{company}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Enhanced Status Selector */}
+            <div className="relative">
+              <select
+                className={`
+                  appearance-none pl-4 pr-10 py-3 rounded-xl border-0 shadow-lg text-sm font-medium
+                  transition-all duration-300 transform hover:scale-105 focus:scale-105
+                  ${currentStatusColors.bg} ${currentStatusColors.text}
+                  ${statusChanging ? 'animate-pulse' : ''}
+                  ${lastStatusChange ? `ring-4 ${currentStatusColors.ring}` : ''}
+                `}
+                value={job.status || 'NEW'}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                disabled={statusChanging}
+              >
+                {statusOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                {statusChanging ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-current"></div>
+                ) : (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                )}
+              </div>
+            </div>
 
-          {/* Delete Job Button */}
-          <button
-            onClick={handleDeleteJob}
-            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-            title="Delete job"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
+            {/* Enhanced Delete Job Button */}
+            <button
+              onClick={handleDeleteJob}
+              className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200 transform hover:scale-110 shadow-sm hover:shadow-md"
+              title="Delete job"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Job Details */}
-      <div className="px-6 py-4">
-        {/* Primary Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
-          <div className="flex flex-col">
+      {/* Enhanced Job Details */}
+      <div className="px-6 py-6 space-y-8">
+        {/* Primary Info Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+          <div className="flex flex-col space-y-1">
             <span className="text-sm font-medium text-gray-500">Location</span>
-            <span className="text-base text-gray-900">{location}</span>
+            <span className="text-base text-gray-900 font-medium">{location}</span>
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col space-y-1">
             <span className="text-sm font-medium text-gray-500">Job Type</span>
-            <span className="text-base text-gray-900">{getJobType()}</span>
+            <span className="text-base text-gray-900 font-medium">{getJobType()}</span>
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col space-y-1">
             <span className="text-sm font-medium text-gray-500">Date Posted/Found</span>
-            <span className="text-base text-gray-900">{getDatePosted()}</span>
+            <span className="text-base text-gray-900 font-medium">{getDatePosted()}</span>
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col space-y-1">
             <span className="text-sm font-medium text-gray-500">Salary</span>
-            <span className="text-base text-gray-900">{getSalary()}</span>
+            <span className="text-base text-gray-900 font-medium">{getSalary()}</span>
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col space-y-1">
             <span className="text-sm font-medium text-gray-500">Easy Apply</span>
-            <span className="text-base text-gray-900">{isEasyApply()}</span>
+            <span className="text-base text-gray-900 font-medium">{isEasyApply()}</span>
           </div>
           {team && (
-            <div className="flex flex-col">
+            <div className="flex flex-col space-y-1">
               <span className="text-sm font-medium text-gray-500">Team</span>
-              <span className="text-base text-gray-900">{team}</span>
+              <span className="text-base text-gray-900 font-medium">{team}</span>
             </div>
           )}
         </div>
 
-        {/* Application Status Info */}
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <h4 className="text-sm font-semibold text-gray-700 mb-3">Application Status</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
+        {/* Enhanced Application Status Info */}
+        <div className="bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl p-6 border border-gray-200">
+          <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+            <svg className="h-5 w-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span>Application Status</span>
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-1">
               <span className="text-sm font-medium text-gray-500">Applied Date</span>
-              <p className="text-sm text-gray-900">{getAppliedDate()}</p>
+              <p className="text-base text-gray-900 font-medium">{getAppliedDate()}</p>
             </div>
-            <div>
+            <div className="space-y-1">
               <span className="text-sm font-medium text-gray-500">Rejected Date</span>
-              <p className="text-sm text-gray-900">{getRejectedDate()}</p>
+              <p className="text-base text-gray-900 font-medium">{getRejectedDate()}</p>
             </div>
           </div>
         </div>
 
-        {/* Skills Sections */}
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {metadata.technical_skills && (
-            <div>
-              <h4 className="text-sm font-medium text-gray-500 mb-1">Technical Skills</h4>
-              <p className="text-base text-gray-900 bg-gray-50 px-3 py-2 rounded">
-                {formatSkillsList(metadata.technical_skills)}
-              </p>
-            </div>
-          )}
+        {/* Enhanced Skills Sections */}
+        {((metadata.technical_skills && metadata.technical_skills.length > 0) ||
+          (metadata.non_technical_skills && metadata.non_technical_skills.length > 0) ||
+          (metadata.ats_keywords && metadata.ats_keywords.length > 0)) && (
+          <div className="space-y-6">
+            <h4 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+              <svg className="h-5 w-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <span>Skills & Keywords</span>
+            </h4>
 
-          {metadata.non_technical_skills && (
-            <div>
-              <h4 className="text-sm font-medium text-gray-500 mb-1">Non-Technical Skills</h4>
-              <p className="text-base text-gray-900 bg-gray-50 px-3 py-2 rounded">
-                {formatSkillsList(metadata.non_technical_skills)}
-              </p>
-            </div>
-          )}
-        </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {metadata.technical_skills && (
+                <div className="bg-blue-50 p-5 rounded-xl border border-blue-200 hover:shadow-md transition-shadow duration-200">
+                  <h5 className="text-sm font-semibold text-blue-900 mb-3 flex items-center space-x-2">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                    </svg>
+                    <span>Technical Skills</span>
+                  </h5>
+                  <div className="flex flex-wrap gap-2">
+                    {metadata.technical_skills.map((skill, index) => (
+                      <span key={index} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full border border-blue-200 hover:bg-blue-200 transition-colors duration-150">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-        {/* ATS Keywords */}
-        {metadata.ats_keywords && metadata.ats_keywords.length > 0 && (
-          <div className="mt-4">
-            <h4 className="text-sm font-medium text-gray-500 mb-1">ATS Keywords</h4>
-            <p className="text-base text-gray-900 bg-gray-50 px-3 py-2 rounded">
-              {formatSkillsList(metadata.ats_keywords)}
-            </p>
+              {metadata.non_technical_skills && (
+                <div className="bg-green-50 p-5 rounded-xl border border-green-200 hover:shadow-md transition-shadow duration-200">
+                  <h5 className="text-sm font-semibold text-green-900 mb-3 flex items-center space-x-2">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span>Soft Skills</span>
+                  </h5>
+                  <div className="flex flex-wrap gap-2">
+                    {metadata.non_technical_skills.map((skill, index) => (
+                      <span key={index} className="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full border border-green-200 hover:bg-green-200 transition-colors duration-150">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {metadata.ats_keywords && (
+                <div className="bg-purple-50 p-5 rounded-xl border border-purple-200 lg:col-span-2 hover:shadow-md transition-shadow duration-200">
+                  <h5 className="text-sm font-semibold text-purple-900 mb-3 flex items-center space-x-2">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                    </svg>
+                    <span>ATS Keywords</span>
+                  </h5>
+                  <div className="flex flex-wrap gap-2">
+                    {metadata.ats_keywords.map((keyword, index) => (
+                      <span key={index} className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full border border-purple-200 hover:bg-purple-200 transition-colors duration-150">
+                        {keyword}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Description Section */}
-        <div className="mt-6">
-          <div className="flex justify-between items-center mb-2">
-            <h4 className="text-sm font-medium text-gray-500">Description</h4>
+        {/* Enhanced Description Section */}
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h4 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+              <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Job Description</span>
+            </h4>
+
             <button
               onClick={() => setExpandedDescription(!expandedDescription)}
-              className="text-xs text-indigo-600 hover:text-indigo-800"
+              className="px-4 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-all duration-200 flex items-center space-x-2"
             >
-              {expandedDescription ? "Show Less" : "Show More"}
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              <span>{expandedDescription ? "Show Less" : "Show More"}</span>
             </button>
           </div>
 
-          <div className={`prose prose-sm max-w-none bg-gray-50 p-4 rounded ${expandedDescription ? '' : 'max-h-64 overflow-y-auto'}`}>
-            <div className="whitespace-pre-line">
-              {description}
+          <div className={`bg-gray-50 rounded-xl p-6 transition-all duration-300 hover:shadow-md ${expandedDescription ? 'max-h-none' : 'max-h-64 overflow-hidden'}`}>
+            <div className="prose prose-sm max-w-none">
+              <div className="whitespace-pre-line text-gray-700 leading-relaxed">
+                {description}
+              </div>
+
+              {metadata.duties && metadata.duties.length > 0 && (
+                <div className="mt-6">
+                  <h5 className="font-semibold text-gray-900 mb-3 flex items-center space-x-2">
+                    <svg className="h-4 w-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Key Responsibilities</span>
+                  </h5>
+                  <ul className="space-y-2">
+                    {metadata.duties.map((duty, index) => (
+                      <li key={index} className="flex items-start space-x-3">
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full mt-2 flex-shrink-0"></div>
+                        <span className="text-gray-700">{duty}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {metadata.qualifications && metadata.qualifications.length > 0 && (
+                <div className="mt-6">
+                  <h5 className="font-semibold text-gray-900 mb-3 flex items-center space-x-2">
+                    <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 004.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                    <span>Required Qualifications</span>
+                  </h5>
+                  <ul className="space-y-2">
+                    {metadata.qualifications.map((qual, index) => (
+                      <li key={index} className="flex items-start space-x-3">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                        <span className="text-gray-700">{qual}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-
-            {metadata.duties && metadata.duties.length > 0 && (
-              <div className="mt-4">
-                <h5 className="font-medium text-gray-900 mb-2">Responsibilities:</h5>
-                <ul className="list-disc pl-5 space-y-2">
-                  {metadata.duties.map((duty, index) => (
-                    <li key={index}>{duty}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {metadata.qualifications && metadata.qualifications.length > 0 && (
-              <div className="mt-4">
-                <h5 className="font-medium text-gray-900 mb-2">Qualifications:</h5>
-                <ul className="list-disc pl-5 space-y-2">
-                  {metadata.qualifications.map((qual, index) => (
-                    <li key={index}>{qual}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Resume section */}
+        {/* Enhanced resume section */}
         {resumeId && (job.status === 'RESUME_GENERATED' || job.status === 'APPLIED' || job.status === 'INTERVIEW' || job.status === 'OFFER' || job.status === 'REJECTED' || job.status === 'DECLINED') && (
-          <div className="mt-6 border-t border-gray-200 pt-4">
-            <h4 className="text-sm font-medium text-gray-500 mb-2">Resume</h4>
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6 border border-purple-200 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-lg font-semibold text-purple-900 flex items-center space-x-2">
+                <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Generated Resume</span>
+              </h4>
+              <div className="flex items-center space-x-2">
+                <span className="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full ring-2 ring-green-200">
+                  Ready
+                </span>
+              </div>
+            </div>
             <div className="flex">
               <button
                 onClick={handleViewEditResume}
-                disabled={fetchingYamlForModal}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center space-x-2 px-6 py-3 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-purple-600 hover:bg-purple-700 transition-all duration-200 transform hover:scale-105"
               >
-                {fetchingYamlForModal ? (
-                  <>
-                    <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></span>
-                    Loading Resume...
-                  </>
-                ) : (
-                  "View/Edit Resume"
-                )}
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>View/Edit Resume</span>
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Error/Success Messages */}
+      {/* Enhanced Error/Success Messages */}
       {!userResumeData && (
-        <div className="mx-6 mb-4 px-4 py-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700">
-          <p className="font-medium">No resume data found</p>
-          <p className="text-sm">Please update your resume in Settings before generating a customized resume.</p>
+        <div className="mx-6 mb-4 animate-slide-down">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-start space-x-3">
+              <svg className="h-5 w-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-yellow-800">No resume data found</p>
+                <p className="text-sm text-yellow-700 mt-1">Please update your resume in Settings before generating a customized resume.</p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {resumeError && (
-        <div className="mx-6 mb-4 px-4 py-3 bg-red-50 border-l-4 border-red-400 text-red-700">
-          <p>{resumeError}</p>
+        <div className="mx-6 mb-4 animate-slide-down">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-start space-x-3">
+              <svg className="h-5 w-5 text-red-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm text-red-800">{resumeError}</p>
+            </div>
+          </div>
         </div>
       )}
 
       {resumeMessage && (
-        <div className="mx-6 mb-4 px-4 py-3 bg-green-50 border-l-4 border-green-400 text-green-700">
-          <p>{resumeMessage}</p>
+        <div className="mx-6 mb-4 animate-slide-down">
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center space-x-3">
+              <svg className="h-5 w-5 text-green-500 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm font-medium text-green-800">{resumeMessage}</p>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Resume Status Tracker */}
       {showStatusTracker && resumeId && (
-        <div className="mx-6 mb-4">
+        <div className="mx-6 mb-4 animate-slide-down">
           <ResumeStatusTracker
             resumeId={resumeId}
             onComplete={handleResumeComplete}
@@ -521,72 +546,73 @@ function JobDetail({ job, onStatusChange, onDeleteJob }) {
         </div>
       )}
 
-      {/* Modals */}
-      {showYamlModal && (
-        <ResumeYamlModal
-          yamlContent={resumeYaml}
-          onSave={handleSaveYaml}
-          onClose={() => setShowYamlModal(false)}
-        />
-      )}
-
-      {showSimplifyModal && (
-        <SimplifyUploadModal
-          isOpen={showSimplifyModal}
-          onClose={() => setShowSimplifyModal(false)}
-          resumeId={resumeId}
-          jobId={job.id}
-          resumeYamlVersion={resumeYamlVersion} // Pass version to force refresh
-          onUploadComplete={handleSimplifyUploadComplete}
-        />
-      )}
-
-      {/* Action Buttons */}
-      <div className="px-6 py-4 bg-gray-50 flex flex-wrap gap-3 justify-end rounded-b-lg">
+      {/* Enhanced Action Buttons */}
+      <div className="px-6 py-6 bg-gradient-to-r from-gray-50 to-slate-50 flex flex-wrap gap-4 justify-end rounded-b-2xl border-t border-gray-200">
         <button
-          type="button"
-          className="flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           onClick={handleGenerateResume}
           disabled={generatingResume || showStatusTracker || !userResumeData}
+          className="flex items-center justify-center space-x-2 py-3 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-xl shadow-lg hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105"
         >
           {generatingResume ? (
             <>
-              <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></span>
-              Generating Resume...
+              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+              <span>Generating Resume...</span>
             </>
           ) : (
-            "Generate Resume"
+            <>
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span>Generate Resume</span>
+            </>
           )}
         </button>
 
         <button
-          type="button"
-          className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleUploadToSimplify}
           disabled={uploadingToSimplify || !isUploadToSimplifyEnabled()}
+          className="flex items-center justify-center space-x-2 py-3 px-6 bg-white text-gray-700 border border-gray-300 font-medium rounded-xl shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105"
         >
           {uploadingToSimplify ? (
             <>
-              <span className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-gray-700 rounded-full"></span>
-              Uploading to Simplify...
+              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-600"></div>
+              <span>Uploading to Simplify...</span>
             </>
           ) : (
-            "Upload to Simplify"
+            <>
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span>Upload to Simplify</span>
+            </>
           )}
         </button>
 
         <button
-          type="button"
-          className="flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           onClick={() => {
             onStatusChange(job.id, 'APPLIED');
             window.open(job.job_url, '_blank');
           }}
           disabled={!job.job_url}
+          className="flex items-center justify-center space-x-2 py-3 px-6 bg-white text-gray-700 border border-gray-300 font-medium rounded-xl shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105"
         >
-          Apply
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+          <span>Apply</span>
         </button>
       </div>
+
+      <style jsx>{`
+        @keyframes slide-down {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-slide-down {
+          animation: slide-down 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

@@ -85,17 +85,18 @@ function Login() {
 
               {/* Success Stats */}
               <div className="grid grid-cols-3 gap-4 mb-8">
+
+              <div className="text-center p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/20">
+                <div className="text-2xl font-bold text-purple-600">95%</div>
+                <div className="text-sm text-gray-600">Success Rate</div>
+              </div>
                 <div className="text-center p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/20">
-                  <div className="text-2xl font-bold text-indigo-600">50K+</div>
-                  <div className="text-sm text-gray-600">Applications Tracked</div>
+                  <div className="text-2xl font-bold text-indigo-600">100's</div>
+                  <div className="text-sm text-gray-600"> of Applications Tracked</div>
                 </div>
                 <div className="text-center p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/20">
-                  <div className="text-2xl font-bold text-purple-600">95%</div>
-                  <div className="text-sm text-gray-600">Success Rate</div>
-                </div>
-                <div className="text-center p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/20">
-                  <div className="text-2xl font-bold text-pink-600">10K+</div>
-                  <div className="text-sm text-gray-600">Users</div>
+                  <div className="text-2xl font-bold text-pink-600">GPT4-0</div>
+                  <div className="text-sm text-gray-600">Enhanced results</div>
                 </div>
               </div>
             </div>
@@ -292,26 +293,11 @@ function Login() {
                 </div>
               </div>
             </div>
-
-            {/* Demo Credentials */}
-            <div className="mt-6 p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/20">
-              <h3 className="text-sm font-medium text-gray-900 mb-2">Demo Credentials</h3>
-              <div className="text-xs text-gray-600 space-y-1">
-                <p><strong>Email:</strong> demo@jobagent.com</p>
-                <p><strong>Password:</strong> demo123</p>
-                <p className="text-red-600"><strong>Error Test:</strong> error@test.com</p>
-              </div>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="relative bg-white/80 backdrop-blur-sm border-t border-white/20 py-4">
-        <div className="container mx-auto px-4 text-center text-sm text-gray-600">
-          <p>&copy; 2024 JobAgent. All rights reserved.</p>
-        </div>
-      </footer>
+      <Footer />
 
       <style jsx>{`
         @keyframes blob {
