@@ -59,7 +59,7 @@ const ResumeDocument = ({ data }) => {
         {/* Objective Section - Only show if exists and has content */}
         {data.objective && data.objective.trim() && (
           <>
-            <Text style={styles.sectionTitle}>Objective</Text>
+            <Text style={styles.sectionTitle}>Professional Summary</Text>
             <Text style={styles.textNormal}>{data.objective}</Text>
           </>
         )}
@@ -815,7 +815,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                   {activeTab === "objective" && (
                     <div className="space-y-8">
                       <div className="flex justify-between items-center">
-                        <h4 className="text-2xl font-medium text-gray-900">Professional Objective</h4>
+                        <h4 className="text-2xl font-medium text-gray-900">Professional Summary</h4>
                         <div className="flex items-center">
                           <label className="inline-flex items-center">
                             <input
@@ -861,7 +861,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
 
                       {/* Tips section */}
                       <div className="mt-8 p-6 bg-gray-50 rounded-lg">
-                        <h5 className="font-medium text-gray-900 mb-4 text-lg">💡 Tips for a Strong Objective:</h5>
+                        <h5 className="font-medium text-gray-900 mb-4 text-lg">💡 Tips for a Strong Professional Summary:</h5>
                         <ul className="text-base text-gray-700 space-y-2">
                           <li>• Keep it concise (2-3 sentences)</li>
                           <li>• Include your years of experience</li>
