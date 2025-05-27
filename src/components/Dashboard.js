@@ -323,7 +323,7 @@ function Dashboard() {
                             className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105"
                         >
                           <Plus className="h-4 w-4 mr-2" />
-                          Add Your First Job
+                          Add Your Job
                         </button>
                     )}
                   </div>

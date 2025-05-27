@@ -239,7 +239,7 @@ export const jobsApi = {
 
   // Get job statistics
   getJobStats() {
-    return apiRequest('/api/jobs/stats');
+    return apiRequest('/api/jobs/status');
   },
 
   // Get resumes for a specific job
