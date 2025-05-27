@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
   projectTech: {
     fontSize: 8,
     fontStyle: 'italic',
-    color: '#666666',
+    color: '#000000',
     marginLeft: 8,
     marginTop: 1
   },
