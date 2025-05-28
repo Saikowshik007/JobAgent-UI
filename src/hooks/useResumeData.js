@@ -491,7 +491,152 @@ export const useResumeData = (initialData = null) => {
             ]
         });
     }, []);
+    const handleSkillSubcategoryNameChange = useCallback((catIndex, subcatIndex, value) => {
+        setResumeData(prev => {
+            const skills = [...(prev.skills || [])];
+            if (skills[catIndex].subcategories) {
+                skills[catIndex].subcategories[subcatIndex].name = value;
+            }
+            return {
+                ...prev,
+                skills
+            };
+        });
+    }, []);
 
+    const handleSkillInSubcategoryChange = useCallback((catIndex, subcatIndex, skillIndex, value) => {
+        setResumeData(prev => {
+            const skills = [...(prev.skills || [])];
+            if (skills[catIndex].subcategories) {
+                skills[catIndex].subcategories[subcatIndex].skills[skillIndex] = value;
+            }
+            return {
+                ...prev,
+                skills
+            };
+        });
+    }, []);
+
+    const addSkillSubcategory = useCallback((catIndex) => {
+        setResumeData(prev => {
+            const skills = [...(prev.skills || [])];
+            if (!skills[catIndex].subcategories) {
+                skills[catIndex].subcategories = [];
+            }
+            skills[catIndex].subcategories.push({
+                name: "",
+                skills: [""]
+            });
+            return {
+                ...prev,
+                skills
+            };
+        });
+    }, []);
+
+    const removeSkillSubcategory = useCallback((catIndex, subcatIndex) => {
+        setResumeData(prev => {
+            const skills = [...(prev.skills || [])];
+            if (skills[catIndex].subcategories) {
+                skills[catIndex].subcategories.splice(subcatIndex, 1);
+            }
+            return {
+                ...prev,
+                skills
+            };
+        });
+    }, []);
+
+    const addSkillToSubcategory = useCallback((catIndex, subcatIndex) => {
+        setResumeData(prev => {
+            const skills = [...(prev.skills || [])];
+            if (skills[catIndex].subcategories && skills[catIndex].subcategories[subcatIndex]) {
+                skills[catIndex].subcategories[subcatIndex].skills.push("");
+            }
+            return {
+                ...prev,
+                skills
+            };
+        });
+    }, []);
+
+    const removeSkillFromSubcategory = useCallback((catIndex, subcatIndex, skillIndex) => {
+        setResumeData(prev => {
+            const skills = [...(prev.skills || [])];
+            if (skills[catIndex].subcategories && skills[catIndex].subcategories[subcatIndex]) {
+                skills[catIndex].subcategories[subcatIndex].skills.splice(skillIndex, 1);
+            }
+            return {
+                ...prev,
+                skills
+            };
+        });
+    }, []);
+
+// Conversion functions
+    const convertSubcategoriesToFlat = useCallback((catIndex) => {
+        setResumeData(prev => {
+            const skills = [...(prev.skills || [])];
+            const skillCategory = skills[catIndex];
+
+            if (skillCategory.subcategories) {
+                // Flatten all skills from subcategories
+                const allSkills = [];
+                skillCategory.subcategories.forEach(subcat => {
+                    if (subcat.skills) {
+                        allSkills.push(...subcat.skills);
+                    }
+                });
+
+                // Remove duplicates (case-insensitive)
+                const uniqueSkills = [];
+                const seenSkills = new Set();
+                allSkills.forEach(skill => {
+                    const lowerSkill = skill.toLowerCase().trim();
+                    if (lowerSkill && !seenSkills.has(lowerSkill)) {
+                        seenSkills.add(lowerSkill);
+                        uniqueSkills.push(skill.trim());
+                    }
+                });
+
+                // Convert to flat structure
+                skills[catIndex] = {
+                    category: skillCategory.category,
+                    skills: uniqueSkills
+                };
+            }
+
+            return {
+                ...prev,
+                skills
+            };
+        });
+    }, []);
+
+    const convertFlatToSubcategories = useCallback((catIndex) => {
+        setResumeData(prev => {
+            const skills = [...(prev.skills || [])];
+            const skillCategory = skills[catIndex];
+
+            if (skillCategory.skills && !skillCategory.subcategories) {
+                // Convert flat skills to subcategories structure
+                skills[catIndex] = {
+                    category: skillCategory.category,
+                    subcategories: [
+                        {
+                            name: "General",
+                            skills: [...skillCategory.skills]
+                        }
+                    ]
+                };
+            }
+
+            return {
+                ...prev,
+                skills
+            };
+        });
+    }, []);
     return {
         resumeData,
         setResumeData,
@@ -530,6 +675,14 @@ export const useResumeData = (initialData = null) => {
         removeSkillCategory,
         addSkill,
         removeSkill,
+        handleSkillSubcategoryNameChange,
+        handleSkillInSubcategoryChange,
+        addSkillSubcategory,
+        removeSkillSubcategory,
+        addSkillToSubcategory,
+        removeSkillFromSubcategory,
+        convertSubcategoriesToFlat,
+        convertFlatToSubcategories,
         // Utilities
         exportToYaml,
         importFromYaml,
@@ -569,6 +722,8 @@ export const useDragAndDrop = (resumeData, setResumeData) => {
         e.stopPropagation();
         e.dataTransfer.dropEffect = 'move';
     }, []);
+
+// Update the handleDrop function in useDragAndDrop hook to handle subcategories
 
     const handleDrop = useCallback((e, type, targetSectionIndex, targetItemIndex = null) => {
         e.preventDefault();
@@ -627,10 +782,20 @@ export const useDragAndDrop = (resumeData, setResumeData) => {
             if (sourceItemIndex !== null && targetItemIndex !== null) {
                 // Reordering skills within category
                 if (sourceSectionIndex === targetSectionIndex) {
-                    const skills = [...newData.skills[sourceSectionIndex].skills];
-                    const [removed] = skills.splice(sourceItemIndex, 1);
-                    skills.splice(targetItemIndex, 0, removed);
-                    newData.skills[sourceSectionIndex].skills = skills;
+                    const skillCategory = newData.skills[sourceSectionIndex];
+
+                    // Handle subcategories structure
+                    if (skillCategory.subcategories) {
+                        // For now, we'll handle drag within the same subcategory only
+                        // More complex cross-subcategory dragging would require additional logic
+                        console.log('Drag and drop within subcategories not fully implemented yet');
+                    } else if (skillCategory.skills) {
+                        // Handle flat skills structure
+                        const skills = [...skillCategory.skills];
+                        const [removed] = skills.splice(sourceItemIndex, 1);
+                        skills.splice(targetItemIndex, 0, removed);
+                        newData.skills[sourceSectionIndex].skills = skills;
+                    }
                 }
             } else {
                 // Reordering skill categories

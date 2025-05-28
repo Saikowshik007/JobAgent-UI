@@ -156,11 +156,25 @@ const ResumeDocument = ({ data }) => {
           {data.skills && data.skills.length > 0 && (
               <>
                 <Text style={styles.sectionTitle}>Skills</Text>
-                {data.skills.map((s, idx) => (
-                    <Text key={idx} style={styles.textNormal}>
-                      <Text style={{ fontWeight: 'bold' }}>{s.category}:</Text> {s.skills.join(', ')}
-                    </Text>
-                ))}
+                {data.skills.map((skillCategory, idx) => {
+                  // Handle subcategories structure (Technical skills)
+                  if (skillCategory.subcategories) {
+                    return skillCategory.subcategories.map((subcat, subIdx) => (
+                        <Text key={`${idx}-${subIdx}`} style={styles.textNormal}>
+                          <Text style={{ fontWeight: 'bold' }}>{subcat.name}:</Text> {(subcat.skills || []).join(', ')}
+                        </Text>
+                    ));
+                  }
+                  // Handle direct skills structure (Non-technical skills)
+                  else if (skillCategory.skills) {
+                    return (
+                        <Text key={idx} style={styles.textNormal}>
+                          <Text style={{ fontWeight: 'bold' }}>{skillCategory.category}:</Text> {skillCategory.skills.join(', ')}
+                        </Text>
+                    );
+                  }
+                  return null;
+                })}
               </>
           )}
         </Page>
@@ -699,7 +713,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                 onAdd={resumeHook.addSkillCategory}
                                 addButtonText="+ Add Skill Category"
                                 showDragTip={(resumeData.skills || []).length > 1}
-                                size="lg"
+                                size="lg" // or "sm" for Settings.js
                             />
 
                             {(resumeData.skills || []).map((skillCat, catIndex) => (
@@ -724,7 +738,8 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                   </button>
-                                  <div className="ml-12">
+
+                                  <div style={{ marginLeft: '3rem' }}>
                                     <label className="block text-base font-medium text-gray-700 mb-3">
                                       Skill Category
                                     </label>
@@ -737,46 +752,132 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                     />
                                   </div>
 
-                                  <div className="mt-6 ml-12">
-                                    <label className="block text-base font-medium text-gray-700 mb-4">
-                                      Skills
-                                    </label>
-                                    {(skillCat.skills || []).length > 1 && (
-                                        <div className="text-xs text-gray-500 mb-3">
-                                          Drag to reorder skills
+                                  {/* Handle subcategories structure */}
+                                  {skillCat.subcategories && (
+                                      <div style={{ marginLeft: '3rem', marginTop: '2rem' }}>
+                                        <div className="space-y-6">
+                                          {skillCat.subcategories.map((subcat, subcatIndex) => (
+                                              <div key={subcatIndex} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                                <div className="flex justify-between items-center mb-4">
+                                                  <label className="block text-sm font-medium text-gray-700">
+                                                    Subcategory: {subcat.name}
+                                                  </label>
+                                                  <button
+                                                      type="button"
+                                                      onClick={() => resumeHook.removeSkillSubcategory(catIndex, subcatIndex)}
+                                                      className="text-red-500 hover:text-red-700"
+                                                  >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                  </button>
+                                                </div>
+
+                                                <input
+                                                    type="text"
+                                                    className="mb-3 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-sm border-gray-300 rounded-md p-2"
+                                                    value={subcat.name || ""}
+                                                    onChange={(e) => resumeHook.handleSkillSubcategoryNameChange(catIndex, subcatIndex, e.target.value)}
+                                                    placeholder="e.g., Languages & Frameworks"
+                                                />
+
+                                                <div className="space-y-2">
+                                                  {(subcat.skills || []).map((skill, skillIndex) => (
+                                                      <div key={skillIndex} className="flex items-center">
+                                                        <input
+                                                            type="text"
+                                                            className="focus:ring-indigo-500 focus:border-indigo-500 flex-1 block w-full shadow-sm text-sm border-gray-300 rounded-md p-2"
+                                                            value={skill}
+                                                            onChange={(e) => resumeHook.handleSkillInSubcategoryChange(catIndex, subcatIndex, skillIndex, e.target.value)}
+                                                            placeholder="Enter a skill"
+                                                        />
+                                                        {(subcat.skills || []).length > 1 && (
+                                                            <DeleteButton onClick={() => resumeHook.removeSkillFromSubcategory(catIndex, subcatIndex, skillIndex)} size="sm" />
+                                                        )}
+                                                      </div>
+                                                  ))}
+                                                  <AddButton onClick={() => resumeHook.addSkillToSubcategory(catIndex, subcatIndex)} size="sm">
+                                                    + Add Skill
+                                                  </AddButton>
+                                                </div>
+                                              </div>
+                                          ))}
+                                          <AddButton onClick={() => resumeHook.addSkillSubcategory(catIndex)} size="sm">
+                                            + Add Subcategory
+                                          </AddButton>
                                         </div>
-                                    )}
-                                    <div className="space-y-3">
-                                      {(skillCat.skills || []).map((skill, skillIndex) => (
-                                          <DraggableItem
-                                              key={skillIndex}
-                                              onDragStart={(e) => dragHook.handleDragStart(e, 'skill', catIndex, skillIndex)}
-                                              onDragEnd={dragHook.handleDragEnd}
-                                              onDragOver={dragHook.handleDragOver}
-                                              onDrop={(e) => dragHook.handleDrop(e, 'skill', catIndex, skillIndex)}
-                                              isDragging={dragHook.draggedItem?.type === 'skill' && dragHook.draggedItem?.sectionIndex === catIndex && dragHook.draggedItem?.itemIndex === skillIndex}
-                                              className="flex items-center bg-gray-50 rounded-lg p-2 hover:bg-gray-100 transition-colors"
-                                          >
-                                            <div className="mr-3">
-                                              <DragHandle />
+                                      </div>
+                                  )}
+
+                                  {/* Handle direct skills structure */}
+                                  {skillCat.skills && !skillCat.subcategories && (
+                                      <div style={{ marginLeft: '3rem', marginTop: '2rem' }}>
+                                        <label className="block text-base font-medium text-gray-700 mb-4">
+                                          Skills
+                                        </label>
+                                        {(skillCat.skills || []).length > 1 && (
+                                            <div className="text-xs text-gray-500 mb-3">
+                                              Drag to reorder skills
                                             </div>
-                                            <input
-                                                type="text"
-                                                className="focus:ring-indigo-500 focus:border-indigo-500 flex-1 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
-                                                value={skill}
-                                                onChange={(e) => resumeHook.handleSkillChange(catIndex, skillIndex, e.target.value)}
-                                                placeholder="Enter a skill"
-                                            />
-                                            {(skillCat.skills || []).length > 1 && (
-                                                <DeleteButton onClick={() => resumeHook.removeSkill(catIndex, skillIndex)} />
-                                            )}
-                                          </DraggableItem>
-                                      ))}
-                                    </div>
-                                    <AddButton onClick={() => resumeHook.addSkill(catIndex)} size="lg">
-                                      + Add Skill
-                                    </AddButton>
-                                  </div>
+                                        )}
+                                        <div className="space-y-3">
+                                          {(skillCat.skills || []).map((skill, skillIndex) => (
+                                              <DraggableItem
+                                                  key={skillIndex}
+                                                  onDragStart={(e) => dragHook.handleDragStart(e, 'skill', catIndex, skillIndex)}
+                                                  onDragEnd={dragHook.handleDragEnd}
+                                                  onDragOver={dragHook.handleDragOver}
+                                                  onDrop={(e) => dragHook.handleDrop(e, 'skill', catIndex, skillIndex)}
+                                                  isDragging={dragHook.draggedItem?.type === 'skill' && dragHook.draggedItem?.sectionIndex === catIndex && dragHook.draggedItem?.itemIndex === skillIndex}
+                                                  className="flex items-center bg-gray-50 rounded-lg p-2 hover:bg-gray-100 transition-colors"
+                                              >
+                                                <div className="mr-3">
+                                                  <DragHandle />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    className="focus:ring-indigo-500 focus:border-indigo-500 flex-1 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                                    value={skill}
+                                                    onChange={(e) => resumeHook.handleSkillChange(catIndex, skillIndex, e.target.value)}
+                                                    placeholder="Enter a skill"
+                                                />
+                                                {(skillCat.skills || []).length > 1 && (
+                                                    <DeleteButton onClick={() => resumeHook.removeSkill(catIndex, skillIndex)} />
+                                                )}
+                                              </DraggableItem>
+                                          ))}
+                                        </div>
+                                        <AddButton onClick={() => resumeHook.addSkill(catIndex)} size="lg">
+                                          + Add Skill
+                                        </AddButton>
+                                      </div>
+                                  )}
+
+                                  {/* Show conversion button for subcategories */}
+                                  {skillCat.subcategories && (
+                                      <div style={{ marginLeft: '3rem', marginTop: '1rem' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => resumeHook.convertSubcategoriesToFlat(catIndex)}
+                                            className="text-sm text-blue-600 hover:text-blue-800 underline"
+                                        >
+                                          Convert to simple skill list
+                                        </button>
+                                      </div>
+                                  )}
+
+                                  {/* Show conversion button for flat skills */}
+                                  {skillCat.skills && !skillCat.subcategories && skillCat.category?.toLowerCase() === 'technical' && (
+                                      <div style={{ marginLeft: '3rem', marginTop: '1rem' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => resumeHook.convertFlatToSubcategories(catIndex)}
+                                            className="text-sm text-blue-600 hover:text-blue-800 underline"
+                                        >
+                                          Convert to subcategories
+                                        </button>
+                                      </div>
+                                  )}
                                 </DraggableItem>
                             ))}
                           </div>
