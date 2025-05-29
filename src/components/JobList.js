@@ -1,281 +1,233 @@
-// Enhanced JobSearch.js with proper response handling
-import React, { useState } from "react";
+// Enhanced JobList.js with animations and fancy effects
+import React, { useState, useEffect } from "react";
 import {
-  Link, Plus, Sparkles, Target, FileText, Send, MessageSquare,
-  Trophy, XCircle, MinusCircle, CheckCircle, AlertCircle,
-  Loader2, Zap, Globe, Key, Info
+  Briefcase, Building2, MapPin, Calendar, FileText, Trash2,
+  Clock, Send, MessageSquare, Trophy, XCircle,
+  MinusCircle, Sparkles, Target, Search
 } from "lucide-react";
-import { jobsApi } from "../utils/api";
 
-function JobSearch({ onSearchComplete, userSettings, userId }) {
-  const [jobUrl, setJobUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [progress, setProgress] = useState({ status: '', message: '' });
-  const [selectedStatus, setSelectedStatus] = useState("NEW");
-  const [showSuccess, setShowSuccess] = useState(false);
+function JobList({
+                   jobs,
+                   userId,
+                   selectedJob,
+                   onJobClick,
+                   bulkDeleteMode = false,
+                   selectedJobs = new Set(),
+                   onDeleteJob
+                 }) {
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [animatingJobs, setAnimatingJobs] = useState(new Set());
+  const [justUpdatedJobs, setJustUpdatedJobs] = useState(new Set());
 
-  // Available status options with icons and colors
-  const statusOptions = [
-    { value: "NEW", label: "New", icon: Sparkles, color: "text-gray-600", bgColor: "bg-gray-50" },
-    { value: "INTERESTED", label: "Interested", icon: Target, color: "text-blue-600", bgColor: "bg-blue-50" },
-    { value: "RESUME_GENERATED", label: "Resume Generated", icon: FileText, color: "text-purple-600", bgColor: "bg-purple-50" },
-    { value: "APPLIED", label: "Applied", icon: Send, color: "text-yellow-600", bgColor: "bg-yellow-50" },
-    { value: "INTERVIEW", label: "Interview", icon: MessageSquare, color: "text-indigo-600", bgColor: "bg-indigo-50" },
-    { value: "OFFER", label: "Offer", icon: Trophy, color: "text-green-600", bgColor: "bg-green-50" },
-    { value: "REJECTED", label: "Rejected", icon: XCircle, color: "text-red-600", bgColor: "bg-red-50" },
-    { value: "DECLINED", label: "Declined", icon: MinusCircle, color: "text-orange-600", bgColor: "bg-orange-50" }
-  ];
+  // Track status changes for animations
+  useEffect(() => {
+    if (selectedJob && selectedJob.id) {
+      const currentJob = jobs.find(job => job.id === selectedJob.id);
+      if (currentJob && currentJob.status !== selectedJob.status) {
+        // Job status changed, trigger animation
+        setJustUpdatedJobs(prev => new Set([...prev, selectedJob.id]));
 
-  const handleAnalyze = async (e) => {
-    e.preventDefault();
-
-    if (!jobUrl.trim()) {
-      setError("Please enter a job URL");
-      return;
+        // Remove animation after 2 seconds
+        setTimeout(() => {
+          setJustUpdatedJobs(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(selectedJob.id);
+            return newSet;
+          });
+        }, 2000);
+      }
     }
+  }, [jobs, selectedJob]);
 
-    // Check if API key is available
-    const apiKey = userSettings?.openaiApiKey || "";
-    if (!apiKey) {
-      setError("OpenAI API key is required. Please add it in your settings.");
-      return;
-    }
+  // Helper function to safely get job display properties
+  const getJobTitle = (job) => {
+    return job.title || job.metadata?.job_title || "Untitled Position";
+  };
 
-    try {
-      setLoading(true);
-      setError("");
-      setShowSuccess(false);
-      setProgress({ status: 'analyzing', message: 'Analyzing job posting...' });
+  const getJobCompany = (job) => {
+    return job.company || job.metadata?.company || "Unknown Company";
+  };
 
-      console.log("🔍 Starting job analysis:", {
-        url: jobUrl,
-        status: selectedStatus,
-        hasApiKey: !!apiKey
-      });
+  const getJobLocation = (job) => {
+    return job.location ||
+        (job.metadata?.is_fully_remote ? "Remote" : job.metadata?.location) ||
+        null;
+  };
 
-      // Make actual API call to analyze the job
-      const response = await jobsApi.analyzeJob(jobUrl, selectedStatus, apiKey);
+  const getJobDate = (job) => {
+    return job.date_posted || job.metadata?.date_posted || job.date_found || null;
+  };
 
-      console.log("📋 Job analysis response:", response);
-
-      // Handle different response structures
-      let newJob = null;
-
-      if (response.job_details) {
-        // New API structure with job_details wrapper
-        newJob = response.job_details;
-        console.log("✅ Found job in job_details property");
-      } else if (response.job) {
-        // Standard response with job wrapper
-        newJob = response.job;
-        console.log("✅ Found job in job property");
-      } else if (response.id) {
-        // Direct job object
-        newJob = response;
-        console.log("✅ Using response as direct job object");
-      } else if (Array.isArray(response) && response.length > 0) {
-        // Array of jobs
-        newJob = response[0];
-        console.log("✅ Using first job from array");
-      } else {
-        console.error("❌ Unexpected response structure:", response);
-        throw new Error("Invalid response structure from job analysis");
-      }
-
-      // Validate the job object has required fields
-      if (!newJob || !newJob.id) {
-        console.error("❌ Invalid job object:", newJob);
-        throw new Error("Job analysis returned invalid data - missing job ID");
-      }
-
-      // Log the job data for debugging
-      console.log("📝 Raw job data received:", {
-        id: newJob.id,
-        title: newJob.title,
-        company: newJob.company,
-        status: newJob.status,
-        metadata: newJob.metadata,
-        job_url: newJob.job_url
-      });
-
-      // Ensure the job has basic required fields with better fallbacks
-      const validatedJob = {
-        ...newJob,
-        id: newJob.id,
-        title: newJob.title || newJob.metadata?.job_title || "Job Title Not Available",
-        company: newJob.company || newJob.metadata?.company || "Company Not Available",
-        status: newJob.status || selectedStatus,
-        date_found: newJob.date_found || new Date().toISOString(),
-        job_url: newJob.job_url || jobUrl,
-        metadata: newJob.metadata || {},
-        // Preserve any other fields that might be important
-        description: newJob.description,
-        location: newJob.location,
-        date_posted: newJob.date_posted,
-        applied_date: newJob.applied_date,
-        rejected_date: newJob.rejected_date,
-        resume_id: newJob.resume_id
-      };
-
-      console.log("✅ Validated job:", {
-        id: validatedJob.id,
-        title: validatedJob.title,
-        company: validatedJob.company,
-        status: validatedJob.status,
-        hasMetadata: !!validatedJob.metadata,
-        metadataKeys: validatedJob.metadata ? Object.keys(validatedJob.metadata) : []
-      });
-
-      // Pass the job to the parent component
-      onSearchComplete([validatedJob]);
-
-      setJobUrl("");
-      setShowSuccess(true);
-      setProgress({ status: 'success', message: 'Job added successfully!' });
-
-      // Hide success message after 3 seconds
-      setTimeout(() => {
-        setShowSuccess(false);
-      }, 3000);
-
-    } catch (err) {
-      console.error("❌ Job analysis error:", err);
-
-      let errorMessage = "Job analysis failed";
-
-      if (err.message) {
-        errorMessage += ": " + err.message;
-      } else {
-        errorMessage += ": Unknown error";
-      }
-
-      // Add specific error handling for common issues
-      if (err.message?.includes('403') || err.message?.includes('Forbidden')) {
-        errorMessage = "Access denied. Please check your API key and try again.";
-      } else if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
-        errorMessage = "Authentication failed. Please check your API key.";
-      } else if (err.message?.includes('400') || err.message?.includes('Bad Request')) {
-        errorMessage = "Invalid job URL or request. Please check the URL and try again.";
-      } else if (err.message?.includes('timeout')) {
-        errorMessage = "Request timed out. Please try again.";
-      } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
-        errorMessage = "Network error. Please check your connection and try again.";
-      }
-
-      setError(errorMessage);
-      setProgress({ status: 'error', message: errorMessage });
-    } finally {
-      setLoading(false);
+  // Get status icon and colors
+  const getStatusInfo = (status) => {
+    switch (status) {
+      case "NEW":
+        return {
+          icon: Sparkles,
+          bgColor: "bg-gray-100",
+          textColor: "text-gray-800",
+          glowColor: "shadow-gray-200",
+          ringColor: "ring-gray-300"
+        };
+      case "INTERESTED":
+        return {
+          icon: Target,
+          bgColor: "bg-blue-100",
+          textColor: "text-blue-800",
+          glowColor: "shadow-blue-200",
+          ringColor: "ring-blue-300"
+        };
+      case "RESUME_GENERATED":
+        return {
+          icon: FileText,
+          bgColor: "bg-purple-100",
+          textColor: "text-purple-800",
+          glowColor: "shadow-purple-200",
+          ringColor: "ring-purple-300"
+        };
+      case "APPLIED":
+        return {
+          icon: Send,
+          bgColor: "bg-yellow-100",
+          textColor: "text-yellow-800",
+          glowColor: "shadow-yellow-200",
+          ringColor: "ring-yellow-300"
+        };
+      case "INTERVIEW":
+        return {
+          icon: MessageSquare,
+          bgColor: "bg-indigo-100",
+          textColor: "text-indigo-800",
+          glowColor: "shadow-indigo-200",
+          ringColor: "ring-indigo-300"
+        };
+      case "OFFER":
+        return {
+          icon: Trophy,
+          bgColor: "bg-green-100",
+          textColor: "text-green-800",
+          glowColor: "shadow-green-200",
+          ringColor: "ring-green-300"
+        };
+      case "REJECTED":
+        return {
+          icon: XCircle,
+          bgColor: "bg-red-100",
+          textColor: "text-red-800",
+          glowColor: "shadow-red-200",
+          ringColor: "ring-red-300"
+        };
+      case "DECLINED":
+        return {
+          icon: MinusCircle,
+          bgColor: "bg-orange-100",
+          textColor: "text-orange-800",
+          glowColor: "shadow-orange-200",
+          ringColor: "ring-orange-300"
+        };
+      default:
+        return {
+          icon: Clock,
+          bgColor: "bg-gray-100",
+          textColor: "text-gray-800",
+          glowColor: "shadow-gray-200",
+          ringColor: "ring-gray-300"
+        };
     }
   };
 
-  const selectedStatusOption = statusOptions.find(option => option.value === selectedStatus);
-  const SelectedIcon = selectedStatusOption?.icon || Sparkles;
+  // Updated to match the API's JobStatusEnum values
+  const statusOptions = [
+    { value: "ALL", label: "All Jobs", icon: Briefcase },
+    { value: "NEW", label: "New", icon: Sparkles },
+    { value: "INTERESTED", label: "Interested", icon: Target },
+    { value: "RESUME_GENERATED", label: "Resume Generated", icon: FileText },
+    { value: "APPLIED", label: "Applied", icon: Send },
+    { value: "INTERVIEW", label: "Interviewing", icon: MessageSquare },
+    { value: "OFFER", label: "Offer", icon: Trophy },
+    { value: "REJECTED", label: "Rejected", icon: XCircle },
+    { value: "DECLINED", label: "Declined", icon: MinusCircle }
+  ];
+
+  const filteredJobs = jobs.filter(job => {
+    if (!job) return false;
+
+    const title = getJobTitle(job);
+    const company = getJobCompany(job);
+    const location = getJobLocation(job);
+
+    const matchesStatus = statusFilter === "ALL" || job.status === statusFilter;
+    const matchesSearch = searchQuery === "" ||
+        (title && title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (company && company.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (location && location.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    return matchesStatus && matchesSearch;
+  });
+
+  const handleDeleteClick = (e, jobId) => {
+    e.stopPropagation();
+
+    // Add delete animation
+    setAnimatingJobs(prev => new Set([...prev, jobId]));
+
+    // Trigger actual delete after animation starts
+    setTimeout(() => {
+      onDeleteJob(jobId);
+      setAnimatingJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    }, 300);
+  };
 
   return (
-      <div className="relative">
-        {/* Header with gradient and icon */}
-        <div className="mb-6">
-          <div className="flex items-center space-x-3 mb-2">
-            <div className="p-3 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl shadow-lg">
-              <Plus className="h-6 w-6 text-white" />
+      <div className="bg-white shadow-xl rounded-xl border border-gray-100">
+        <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-indigo-100 rounded-lg">
+                <Briefcase className="h-5 w-5 text-indigo-600" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Job Results
+                <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                {filteredJobs.length}
+              </span>
+              </h2>
             </div>
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              Add Job by URL
-            </h2>
+
+            {bulkDeleteMode && (
+                <div className="animate-pulse">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 ring-2 ring-red-200">
+                <Trash2 className="h-3 w-3 mr-1" />
+                Bulk Delete Mode
+              </span>
+                </div>
+            )}
           </div>
-          <p className="text-gray-600">Transform any job posting into an organized application tracker</p>
-        </div>
 
-        {/* Animated Error Alert */}
-        {error && (
-            <div className="animate-slide-down mb-6">
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm">
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    <AlertCircle className="h-5 w-5 text-red-400 animate-pulse" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-sm font-medium text-red-800">Error</h3>
-                    <p className="text-sm text-red-700 mt-1">{error}</p>
-                  </div>
-                  <button
-                      onClick={() => setError("")}
-                      className="flex-shrink-0 text-red-400 hover:text-red-600 transition-colors duration-200"
-                  >
-                    <XCircle className="h-4 w-4" />
-                  </button>
-                </div>
+          <div className="mt-4 flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-gray-400" />
               </div>
-            </div>
-        )}
-
-        {/* Animated Success Alert */}
-        {showSuccess && !error && (
-            <div className="animate-slide-down mb-6">
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 shadow-sm">
-                <div className="flex items-center space-x-3">
-                  <CheckCircle className="h-5 w-5 text-green-400 animate-bounce" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-green-800">{progress.message}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-        )}
-
-        {/* Main Form */}
-        <form onSubmit={handleAnalyze} className="space-y-6">
-          {/* URL Input with enhanced styling */}
-          <div className="group">
-            <label htmlFor="job-url" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-              <Link className="h-4 w-4" />
-              <span>Job URL</span>
-            </label>
-            <div className="relative">
               <input
-                  type="url"
-                  id="job-url"
-                  className="
-                block w-full rounded-xl border-gray-300 shadow-sm
-                focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200
-                transition-all duration-200 pl-12 py-3
-                group-hover:shadow-md
-              "
-                  placeholder="https://www.linkedin.com/jobs/view/12345678"
-                  value={jobUrl}
-                  onChange={(e) => setJobUrl(e.target.value)}
-                  disabled={loading}
+                  type="text"
+                  placeholder="Search jobs..."
+                  className="shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-lg transition-all duration-200"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
               />
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Globe className="h-5 w-5 text-gray-400 group-hover:text-indigo-500 transition-colors duration-200" />
-              </div>
             </div>
-            <p className="mt-2 text-sm text-gray-500 flex items-center space-x-1">
-              <Info className="h-4 w-4" />
-              <span>Paste the URL of a job posting from LinkedIn, Indeed, or other job boards</span>
-            </p>
-          </div>
 
-          {/* Status Selection with fancy styling */}
-          <div className="group">
-            <label htmlFor="initial-status" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-              <SelectedIcon className={`h-4 w-4 ${selectedStatusOption?.color}`} />
-              <span>Initial Status</span>
-            </label>
-            <div className="relative">
+            <div className="w-full sm:w-auto">
               <select
-                  id="initial-status"
-                  className="
-                block w-full rounded-xl border-gray-300 shadow-sm
-                focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200
-                transition-all duration-200 py-3 pl-4 pr-10
-                group-hover:shadow-md appearance-none
-              "
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                  disabled={loading}
+                  className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-lg transition-all duration-200"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
               >
                 {statusOptions.map(option => (
                     <option key={option.value} value={option.value}>
@@ -283,179 +235,182 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
                     </option>
                 ))}
               </select>
-              <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                <SelectedIcon className={`h-5 w-5 ${selectedStatusOption?.color}`} />
-              </div>
             </div>
-            <p className="mt-2 text-sm text-gray-500">
-              Choose the initial status for this job in your pipeline
-            </p>
           </div>
+        </div>
 
-          {/* Submit Button with loading animation */}
-          <div className="flex flex-wrap gap-4">
-            <button
-                type="submit"
-                disabled={loading}
-                className={`
-              relative flex-grow sm:flex-grow-0 justify-center py-3 px-6 border border-transparent
-              rounded-xl shadow-lg text-sm font-medium text-white overflow-hidden
-              transition-all duration-300 transform hover:scale-105
-              ${loading
-                    ? 'bg-indigo-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
-                }
-            `}
-            >
-              {loading && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 animate-pulse"></div>
-              )}
-              <div className="relative flex items-center justify-center space-x-2">
-                {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>{progress.status === 'analyzing' ? 'Analyzing Job...' : 'Processing...'}</span>
-                    </>
+        <div className="relative">
+          {filteredJobs.length === 0 ? (
+              <div className="px-6 py-12 text-center text-gray-500">
+                {jobs.length === 0 ? (
+                    <div className="animate-fade-in">
+                      <div className="mx-auto h-24 w-24 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full flex items-center justify-center mb-4">
+                        <Briefcase className="h-12 w-12 text-indigo-400" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No jobs yet</h3>
+                      <p className="text-gray-500">Get started by adding your first job posting.</p>
+                    </div>
                 ) : (
-                    <>
-                      <Zap className="h-4 w-4" />
-                      <span>Add Job</span>
-                    </>
+                    <div className="animate-fade-in">
+                      <div className="mx-auto h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                        <Search className="h-8 w-8 text-gray-400" />
+                      </div>
+                      <p className="text-gray-600 font-medium">No jobs found matching your search criteria.</p>
+                      <p className="text-sm mt-1 text-gray-500">Try adjusting your search or filter.</p>
+                    </div>
                 )}
               </div>
-            </button>
-          </div>
-        </form>
+          ) : (
+              <ul className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
+                {filteredJobs.map((job, index) => {
+                  const title = getJobTitle(job);
+                  const company = getJobCompany(job);
+                  const location = getJobLocation(job);
+                  const date = getJobDate(job);
+                  const statusInfo = getStatusInfo(job.status);
+                  const StatusIcon = statusInfo.icon;
 
-        {/* Enhanced Instructions Section */}
-        <div className="mt-8 bg-gradient-to-r from-gray-50 to-indigo-50 rounded-xl p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <Info className="h-4 w-4 text-indigo-600" />
-              </div>
-              <h3 className="text-sm font-semibold text-gray-900">Quick Instructions</h3>
-            </div>
+                  const isSelected = selectedJob && selectedJob.id === job.id;
+                  const isBulkSelected = selectedJobs.has(job.id);
+                  const isAnimating = animatingJobs.has(job.id);
+                  const isJustUpdated = justUpdatedJobs.has(job.id);
 
-            {userSettings?.openaiApiKey ? (
-                <div className="animate-pulse">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 ring-2 ring-green-200">
-                <Key className="h-3 w-3 mr-1" />
-                API Key Ready
-              </span>
-                </div>
-            ) : (
-                <div className="animate-pulse">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 ring-2 ring-yellow-200">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                No API Key
-              </span>
-                </div>
-            )}
-          </div>
+                  return (
+                      <li
+                          key={job.id}
+                          className={`
+                    px-6 py-4 cursor-pointer transition-all duration-300 ease-in-out
+                    hover:bg-gradient-to-r hover:from-gray-50 hover:to-indigo-50 hover:shadow-sm
+                    transform hover:scale-[1.01] relative group
+                    ${isSelected && !bulkDeleteMode ? "bg-gradient-to-r from-indigo-50 to-purple-50 border-l-4 border-indigo-500 shadow-lg" : ""}
+                    ${isBulkSelected ? "bg-gradient-to-r from-red-50 to-pink-50 border-l-4 border-red-500 shadow-lg" : ""}
+                    ${isAnimating ? "animate-pulse opacity-50 scale-95" : ""}
+                    ${isJustUpdated ? `animate-pulse ring-4 ${statusInfo.ringColor} ${statusInfo.glowColor} shadow-lg` : ""}
+                  `}
+                          style={{
+                            animationDelay: `${index * 50}ms`,
+                            animationFillMode: 'both'
+                          }}
+                          onClick={() => onJobClick(job)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                {bulkDeleteMode && (
+                                    <div className="animate-slide-in-left">
+                                      <input
+                                          type="checkbox"
+                                          checked={isBulkSelected}
+                                          onChange={() => onJobClick(job)}
+                                          className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded transition-all duration-200"
+                                          onClick={(e) => e.stopPropagation()}
+                                      />
+                                    </div>
+                                )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-indigo-600">1</span>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Copy Job URL</p>
-                  <p className="text-xs text-gray-600">From LinkedIn, Indeed, or other job sites</p>
-                </div>
-              </div>
+                                <div className="flex items-center space-x-2">
+                                  <Building2 className="h-4 w-4 text-gray-400" />
+                                  <h3 className="text-sm font-semibold text-indigo-600 truncate hover:text-indigo-800 transition-colors duration-200">
+                                    {title}
+                                  </h3>
+                                </div>
+                              </div>
 
-              <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-purple-600">2</span>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Choose Status</p>
-                  <p className="text-xs text-gray-600">Select the initial status for the job</p>
-                </div>
-              </div>
-            </div>
+                              <div className="flex items-center space-x-3">
+                                {/* Animated Status Badge */}
+                                <div className={`
+                            px-3 py-1 inline-flex items-center space-x-1.5 text-xs leading-5 font-medium rounded-full
+                            transition-all duration-300 transform hover:scale-105
+                            ${statusInfo.bgColor} ${statusInfo.textColor}
+                            ${isJustUpdated ? 'animate-bounce ring-2 ring-offset-2 ' + statusInfo.ringColor : ''}
+                          `}>
+                                  <StatusIcon className="h-3 w-3" />
+                                  <span>{job.status || "NEW"}</span>
+                                </div>
 
-            <div className="space-y-3">
-              <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-green-600">3</span>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Paste & Add</p>
-                  <p className="text-xs text-gray-600">Paste the URL and click "Add Job"</p>
-                </div>
-              </div>
+                                {/* Delete Button with hover animation */}
+                                {!bulkDeleteMode && (
+                                    <button
+                                        onClick={(e) => handleDeleteClick(e, job.id)}
+                                        className="
+                                p-2 text-gray-400 hover:text-red-500 hover:bg-red-50
+                                rounded-full transition-all duration-200 transform hover:scale-110
+                                opacity-0 group-hover:opacity-100
+                              "
+                                        title="Delete job"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                )}
+                              </div>
+                            </div>
 
-              <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-blue-600">4</span>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Auto Analysis</p>
-                  <p className="text-xs text-gray-600">System analyzes and adds it to your list</p>
-                </div>
-              </div>
-            </div>
-          </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center space-x-4">
+                                <div className="flex items-center text-sm text-gray-600">
+                                  <Building2 className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
+                                  <span className="font-medium">{company}</span>
+                                </div>
 
-          {!userSettings?.openaiApiKey && (
-              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <AlertCircle className="h-4 w-4 text-yellow-600" />
-                  <p className="text-sm font-medium text-yellow-800">Add your OpenAI API key in settings for job analysis to work</p>
-                </div>
-              </div>
+                                {location && (
+                                    <div className="flex items-center text-sm text-gray-600">
+                                      <MapPin className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
+                                      <span>{location}</span>
+                                    </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center text-sm text-gray-500">
+                                  <Calendar className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
+                                  <span>{date ? new Date(date).toLocaleDateString() : "Recent"}</span>
+                                </div>
+
+                                {/* Resume indicator with animation */}
+                                {job.resume_id && (
+                                    <div className="flex items-center text-xs text-purple-600 animate-fade-in">
+                                      <div className="p-1 bg-purple-100 rounded-full mr-1.5">
+                                        <FileText className="h-3 w-3" />
+                                      </div>
+                                      <span className="font-medium">Resume Generated</span>
+                                    </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Subtle hover effect line */}
+                        <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 group-hover:w-full transition-all duration-300"></div>
+                      </li>
+                  );
+                })}
+              </ul>
           )}
         </div>
 
-        {/* Loading Progress Bar */}
-        {loading && (
-            <div className="mt-6">
-              <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full animate-progress"></div>
-              </div>
-              <p className="text-sm text-gray-600 mt-2 text-center">{progress.message}</p>
-            </div>
-        )}
-
         <style jsx>{`
-        @keyframes slide-down {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
 
-        @keyframes progress {
-          0% { width: 0%; }
-          50% { width: 70%; }
-          100% { width: 100%; }
+        @keyframes slide-in-left {
+          from { opacity: 0; transform: translateX(-10px); }
+          to { opacity: 1; transform: translateX(0); }
         }
 
-        .animate-slide-down {
-          animation: slide-down 0.3s ease-out;
+        .animate-fade-in {
+          animation: fade-in 0.5s ease-out;
         }
 
-        .animate-progress {
-          animation: progress 2s ease-in-out infinite;
+        .animate-slide-in-left {
+          animation: slide-in-left 0.3s ease-out;
         }
       `}</style>
       </div>
   );
 }
 
-export default JobSearch;
+export default JobList;

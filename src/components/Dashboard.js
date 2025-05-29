@@ -1,4 +1,4 @@
-// Dashboard.js - Clean version with proper fixes
+// Dashboard.js - Updated with better job handling and debugging
 import React, { useState, useEffect } from "react";
 import { jobsApi, systemApi, resumeApi } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
@@ -22,7 +22,7 @@ function Dashboard() {
   const [selectedJobs, setSelectedJobs] = useState(new Set());
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
 
-  // Modal states
+  // Modal states moved to Dashboard level
   const [showYamlModal, setShowYamlModal] = useState(false);
   const [resumeYaml, setResumeYaml] = useState(null);
   const [resumeYamlVersion, setResumeYamlVersion] = useState(0);
@@ -66,6 +66,7 @@ function Dashboard() {
 
   const handleJobClick = (job) => {
     if (bulkDeleteMode) {
+      // For future bulk operations if needed
       console.log("Bulk operation not implemented");
     } else {
       console.log("🎯 Selecting job:", job);
@@ -108,6 +109,7 @@ function Dashboard() {
     }
   };
 
+  // Enhanced handler for when new jobs are added via JobSearch
   const handleSearchComplete = (newJobs) => {
     console.log("🆕 Jobs received from search:", newJobs);
 
@@ -116,12 +118,14 @@ function Dashboard() {
       return;
     }
 
+    // Validate each job before adding
     const validatedJobs = newJobs.filter(job => {
       if (!job || !job.id) {
         console.warn("⚠️ Skipping invalid job (missing ID):", job);
         return false;
       }
 
+      // Log each job being added
       console.log("✅ Adding job:", {
         id: job.id,
         title: job.title || job.metadata?.job_title || "No title",
@@ -138,6 +142,7 @@ function Dashboard() {
       return;
     }
 
+    // Add new jobs to the beginning of the list
     setJobs(prevJobs => {
       console.log("📝 Current jobs count:", prevJobs.length);
       console.log("📝 Adding jobs count:", validatedJobs.length);
@@ -146,8 +151,10 @@ function Dashboard() {
       return updatedJobs;
     });
 
+    // Refresh job stats to reflect the new additions
     refreshJobStats();
 
+    // Select the first newly added job
     const firstNewJob = validatedJobs[0];
     if (firstNewJob) {
       console.log("🎯 Auto-selecting first new job:", {
@@ -158,12 +165,16 @@ function Dashboard() {
       setSelectedJob(firstNewJob);
     }
 
+    // Optionally close the job search panel after successful addition
     setShowJobSearch(false);
   };
 
+  // Handler for when JobDetail wants to show the YAML modal
   const handleShowYamlModal = async (resumeId) => {
     try {
       setCurrentResumeId(resumeId);
+
+      // Fetch the YAML content
       const yamlContent = await resumeApi.getResumeYaml(resumeId);
       if (yamlContent) {
         setResumeYaml(yamlContent);
@@ -177,13 +188,16 @@ function Dashboard() {
     }
   };
 
+  // Handler for saving YAML changes
   const handleSaveYaml = async (yamlContent, parsedData) => {
     try {
       await resumeApi.updateResumeYaml(currentResumeId, yamlContent);
       setResumeYaml(yamlContent);
       setResumeYamlVersion(prev => prev + 1);
 
+      // Update the selected job if it has this resume
       if (selectedJob && selectedJob.resume_id === currentResumeId) {
+        // Refresh the selected job or trigger any necessary updates
         console.log('Resume updated successfully');
       }
     } catch (error) {
@@ -192,6 +206,7 @@ function Dashboard() {
     }
   };
 
+  // Handler for showing Simplify modal
   const handleShowSimplifyModal = (resumeId) => {
     setCurrentResumeId(resumeId);
     setShowSimplifyModal(true);
@@ -210,11 +225,12 @@ function Dashboard() {
       <div className="min-h-screen flex flex-col">
         <Navbar />
         <main className="flex-grow container mx-auto px-4 py-6">
-          {/* Header with Add Job Button */}
+          {/* Add Job Button */}
           <div className="mb-6 flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Job Dashboard</h1>
               <p className="text-gray-600">Manage your job applications and track your progress</p>
+              {/* Debug info in development */}
               {process.env.NODE_ENV === 'development' && (
                   <div className="mt-2 text-xs text-gray-500">
                     Jobs: {jobs.length} | Selected: {selectedJob ? `${selectedJob.title || 'Untitled'} (${selectedJob.id})` : 'None'}
@@ -273,17 +289,19 @@ function Dashboard() {
           )}
 
           {/* Job Search Panel with Animation */}
-          {showJobSearch && (
-              <div className="mb-6 transform transition-all duration-500 ease-in-out animate-in slide-in-from-top-2 fade-in">
-                <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-                  <JobSearch
-                      onSearchComplete={handleSearchComplete}
-                      userSettings={userSettings}
-                      userId={currentUser?.uid}
-                  />
-                </div>
-              </div>
-          )}
+          <div className={`mb-6 transition-all duration-500 ease-out ${
+              showJobSearch
+                  ? 'opacity-100 transform translate-y-0 max-h-screen'
+                  : 'opacity-0 transform -translate-y-4 max-h-0 overflow-hidden'
+          }`}>
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+              <JobSearch
+                  onSearchComplete={handleSearchComplete}
+                  userSettings={userSettings}
+                  userId={currentUser?.uid}
+              />
+            </div>
+          </div>
 
           {/* Main Dashboard Layout */}
           <div className="flex flex-col lg:flex-row gap-6">
@@ -314,8 +332,17 @@ function Dashboard() {
                     </div>
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No Job Selected</h3>
                     <p className="text-gray-600 mb-4">
-                      Select a job from the list to view details.
+                      Select a job from the list to view details{jobs.length === 0 ? ", or add a new job to get started" : ""}.
                     </p>
+                    {!showJobSearch && jobs.length === 0 && (
+                        <button
+                            onClick={() => setShowJobSearch(true)}
+                            className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Your First Job
+                        </button>
+                    )}
                   </div>
               )}
             </div>
@@ -323,7 +350,7 @@ function Dashboard() {
         </main>
         <Footer />
 
-        {/* Modals */}
+        {/* Modals at root level for proper full-screen overlay */}
         {showYamlModal && (
             <ResumeYamlModal
                 yamlContent={resumeYaml}
@@ -353,7 +380,7 @@ function Dashboard() {
             />
         )}
       </div>
-  );
+);
 }
 
 export default Dashboard;
