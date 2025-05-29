@@ -62,7 +62,9 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
       // Handle different response structures
       let newJob = null;
 
-      if (response.job) {
+      if (response.job_details) {
+        newJob = response.job_details;
+      } else if (response.job) {
         // Standard response with job wrapper
         newJob = response.job;
       } else if (response.id) {
