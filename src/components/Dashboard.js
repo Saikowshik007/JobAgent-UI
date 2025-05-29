@@ -1,4 +1,4 @@
-// Dashboard.js - Updated with JobSearch integration
+// Dashboard.js - Updated with better job handling and debugging
 import React, { useState, useEffect } from "react";
 import { jobsApi, systemApi, resumeApi } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
@@ -70,8 +70,12 @@ function Dashboard() {
   }, [currentUser, navigate, getUserSettings]);
 
   const handleJobClick = (job) => {
-    if (bulkDeleteMode) toggleJobSelection(job.id);
-    else setSelectedJob(job);
+    if (bulkDeleteMode) {
+      toggleJobSelection(job.id);
+    } else {
+      console.log("🎯 Selecting job:", job);
+      setSelectedJob(job);
+    }
   };
 
   const handleStatusChange = async (jobId, newStatus) => {
@@ -141,23 +145,50 @@ function Dashboard() {
     }
   };
 
-  // Handler for when new jobs are added via JobSearch
+  // Enhanced handler for when new jobs are added via JobSearch
   const handleSearchComplete = (newJobs) => {
-    if (Array.isArray(newJobs) && newJobs.length > 0) {
-      // Add new jobs to the beginning of the list
-      setJobs(prevJobs => [...newJobs, ...prevJobs]);
+    console.log("🆕 Jobs added from search:", newJobs);
 
-      // Refresh job stats to reflect the new additions
-      refreshJobStats();
-
-      // Optionally close the job search panel after successful addition
-      setShowJobSearch(false);
-
-      // Select the first newly added job
-      if (newJobs[0]) {
-        setSelectedJob(newJobs[0]);
-      }
+    if (!Array.isArray(newJobs) || newJobs.length === 0) {
+      console.warn("⚠️ No valid jobs received from search");
+      return;
     }
+
+    // Validate each job before adding
+    const validatedJobs = newJobs.filter(job => {
+      if (!job || !job.id) {
+        console.warn("⚠️ Skipping invalid job (missing ID):", job);
+        return false;
+      }
+      return true;
+    });
+
+    if (validatedJobs.length === 0) {
+      console.error("❌ No valid jobs to add");
+      setError("Failed to add jobs - invalid job data received");
+      return;
+    }
+
+    // Add new jobs to the beginning of the list
+    setJobs(prevJobs => {
+      console.log("📝 Adding jobs to list:", validatedJobs.length);
+      const updatedJobs = [...validatedJobs, ...prevJobs];
+      console.log("📊 Total jobs after adding:", updatedJobs.length);
+      return updatedJobs;
+    });
+
+    // Refresh job stats to reflect the new additions
+    refreshJobStats();
+
+    // Select the first newly added job
+    const firstNewJob = validatedJobs[0];
+    if (firstNewJob) {
+      console.log("🎯 Auto-selecting first new job:", firstNewJob);
+      setSelectedJob(firstNewJob);
+    }
+
+    // Optionally close the job search panel after successful addition
+    setShowJobSearch(false);
   };
 
   // Handler for when JobDetail wants to show the YAML modal
@@ -221,6 +252,12 @@ function Dashboard() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Job Dashboard</h1>
               <p className="text-gray-600">Manage your job applications and track your progress</p>
+              {/* Debug info in development */}
+              {process.env.NODE_ENV === 'development' && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    Jobs: {jobs.length} | Selected: {selectedJob ? `${selectedJob.title || 'Untitled'} (${selectedJob.id})` : 'None'}
+                  </div>
+              )}
             </div>
             <button
                 onClick={() => setShowJobSearch(!showJobSearch)}
@@ -323,7 +360,7 @@ function Dashboard() {
                             className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105"
                         >
                           <Plus className="h-4 w-4 mr-2" />
-                          Add Your Job
+                          Add Your First Job
                         </button>
                     )}
                   </div>

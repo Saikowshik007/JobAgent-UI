@@ -1,4 +1,4 @@
-// Enhanced JobSearch.js with real API integration
+// Enhanced JobSearch.js with proper response handling
 import React, { useState } from "react";
 import {
   Link, Plus, Sparkles, Target, FileText, Send, MessageSquare,
@@ -48,13 +48,57 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
       setShowSuccess(false);
       setProgress({ status: 'analyzing', message: 'Analyzing job posting...' });
 
+      console.log("🔍 Starting job analysis:", {
+        url: jobUrl,
+        status: selectedStatus,
+        hasApiKey: !!apiKey
+      });
+
       // Make actual API call to analyze the job
       const response = await jobsApi.analyzeJob(jobUrl, selectedStatus, apiKey);
 
-      // Handle the response - it should return the analyzed job data
-      const newJob = response.job || response;
+      console.log("📋 Job analysis response:", response);
 
-      onSearchComplete([newJob]);
+      // Handle different response structures
+      let newJob = null;
+
+      if (response.job) {
+        // Standard response with job wrapper
+        newJob = response.job;
+      } else if (response.id) {
+        // Direct job object
+        newJob = response;
+      } else if (Array.isArray(response) && response.length > 0) {
+        // Array of jobs
+        newJob = response[0];
+      } else {
+        console.error("❌ Unexpected response structure:", response);
+        throw new Error("Invalid response structure from job analysis");
+      }
+
+      // Validate the job object has required fields
+      if (!newJob || !newJob.id) {
+        console.error("❌ Invalid job object:", newJob);
+        throw new Error("Job analysis returned invalid data - missing job ID");
+      }
+
+      // Ensure the job has basic required fields
+      const validatedJob = {
+        ...newJob,
+        id: newJob.id,
+        title: newJob.title || newJob.metadata?.job_title || "Untitled Position",
+        company: newJob.company || newJob.metadata?.company || "Unknown Company",
+        status: newJob.status || selectedStatus,
+        date_found: newJob.date_found || new Date().toISOString(),
+        job_url: newJob.job_url || jobUrl,
+        metadata: newJob.metadata || {}
+      };
+
+      console.log("✅ Validated job:", validatedJob);
+
+      // Pass the job to the parent component
+      onSearchComplete([validatedJob]);
+
       setJobUrl("");
       setShowSuccess(true);
       setProgress({ status: 'success', message: 'Job added successfully!' });
@@ -65,8 +109,29 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
       }, 3000);
 
     } catch (err) {
-      console.error("Job analysis error:", err);
-      let errorMessage = "Job analysis failed: " + (err.message || "Unknown error");
+      console.error("❌ Job analysis error:", err);
+
+      let errorMessage = "Job analysis failed";
+
+      if (err.message) {
+        errorMessage += ": " + err.message;
+      } else {
+        errorMessage += ": Unknown error";
+      }
+
+      // Add specific error handling for common issues
+      if (err.message?.includes('403') || err.message?.includes('Forbidden')) {
+        errorMessage = "Access denied. Please check your API key and try again.";
+      } else if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
+        errorMessage = "Authentication failed. Please check your API key.";
+      } else if (err.message?.includes('400') || err.message?.includes('Bad Request')) {
+        errorMessage = "Invalid job URL or request. Please check the URL and try again.";
+      } else if (err.message?.includes('timeout')) {
+        errorMessage = "Request timed out. Please try again.";
+      } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
+        errorMessage = "Network error. Please check your connection and try again.";
+      }
+
       setError(errorMessage);
       setProgress({ status: 'error', message: errorMessage });
     } finally {
@@ -316,7 +381,7 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
               <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <div className="flex items-center space-x-2">
                   <AlertCircle className="h-4 w-4 text-yellow-600" />
-                  <p className="text-sm font-medium text-yellow-800">Add your API key in settings for best results</p>
+                  <p className="text-sm font-medium text-yellow-800">Add your OpenAI API key in settings for job analysis to work</p>
                 </div>
               </div>
           )}
