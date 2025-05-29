@@ -19,11 +19,8 @@ function Dashboard() {
   const [error, setError] = useState("");
   const [showJobSearch, setShowJobSearch] = useState(false);
   const [userSettings, setUserSettings] = useState(null);
-  const [systemStatus, setSystemStatus] = useState(null);
-  const [jobStats, setJobStats] = useState(null);
   const [selectedJobs, setSelectedJobs] = useState(new Set());
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
 
   // Modal states moved to Dashboard level
   const [showYamlModal, setShowYamlModal] = useState(false);
@@ -45,13 +42,11 @@ function Dashboard() {
       try {
         const settings = await getUserSettings();
         setUserSettings(settings);
-        const statusData = await systemApi.getStatus();
-        setSystemStatus(statusData);
+        await systemApi.getStatus();
         const jobsResponse = await jobsApi.getJobs({ limit: 100, offset: 0 });
         setJobs(jobsResponse.jobs || []);
         try {
-          const statsData = await jobsApi.getJobStats();
-          setJobStats(statsData);
+          await jobsApi.getJobStats();
         } catch (statsError) {
           console.warn("Failed to fetch job statistics:", statsError);
         }
@@ -71,7 +66,8 @@ function Dashboard() {
 
   const handleJobClick = (job) => {
     if (bulkDeleteMode) {
-      toggleJobSelection(job.id);
+      // For future bulk operations if needed
+      console.log("Bulk operation not implemented");
     } else {
       console.log("🎯 Selecting job:", job);
       setSelectedJob(job);
@@ -92,38 +88,9 @@ function Dashboard() {
     }
   };
 
-  const toggleJobSelection = (jobId) => {
-    setSelectedJobs(prev => {
-      const newSet = new Set(prev);
-      newSet.has(jobId) ? newSet.delete(jobId) : newSet.add(jobId);
-      return newSet;
-    });
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedJobs.size === 0) return;
-    const confirmDelete = window.confirm(`Delete ${selectedJobs.size} job(s)?`);
-    if (!confirmDelete) return;
-    try {
-      setActionLoading(true);
-      await jobsApi.deleteJobsBatch(Array.from(selectedJobs), false);
-      setJobs(jobs.filter(job => !selectedJobs.has(job.id)));
-      setSelectedJobs(new Set());
-      setBulkDeleteMode(false);
-      if (selectedJob && selectedJobs.has(selectedJob.id)) setSelectedJob(null);
-      refreshJobStats();
-    } catch (error) {
-      console.error("Failed to delete jobs:", error);
-      setError(`Failed to delete jobs: ${error.message}`);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const refreshJobStats = async () => {
     try {
-      const statsData = await jobsApi.getJobStats();
-      setJobStats(statsData);
+      await jobsApi.getJobStats();
     } catch (error) {
       console.warn("Failed to refresh job statistics:", error);
     }
@@ -132,7 +99,6 @@ function Dashboard() {
   const handleDeleteJob = async (jobId) => {
     if (!window.confirm("Delete this job?")) return;
     try {
-      setActionLoading(true);
       await jobsApi.deleteJob(jobId, false);
       setJobs(jobs.filter(job => job.id !== jobId));
       if (selectedJob?.id === jobId) setSelectedJob(null);
@@ -140,8 +106,6 @@ function Dashboard() {
     } catch (error) {
       console.error("Failed to delete job:", error);
       setError(`Failed to delete job: ${error.message}`);
-    } finally {
-      setActionLoading(false);
     }
   };
 

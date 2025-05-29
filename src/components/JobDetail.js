@@ -1,6 +1,6 @@
 // Updated JobDetail.js - Better job validation and state management
 import React, { useState, useEffect, useRef } from 'react';
-import { jobsApi, resumeApi } from '../utils/api';
+import { resumeApi } from '../utils/api';
 import ResumeStatusTracker from './ResumeStatusTracker';
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
@@ -21,27 +21,9 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
   const { currentUser, getUserSettings } = useAuth();
   const currentJobId = useRef(job?.id);
 
-  // Validate job object
-  if (!job || !job.id) {
-    console.error("❌ JobDetail received invalid job:", job);
-    return (
-        <div className="p-8 bg-white rounded-xl shadow text-center">
-          <div className="text-red-400 mb-4">
-            <svg className="h-12 w-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Invalid Job Data</h3>
-          <p className="text-gray-600">
-            The selected job data is invalid. Please try selecting a different job.
-          </p>
-        </div>
-    );
-  }
-
   // COMPLETE state reset when job changes
   useEffect(() => {
-    if (currentJobId.current !== job.id) {
+    if (job?.id && currentJobId.current !== job.id) {
       console.log(`Job changed from ${currentJobId.current} to ${job.id} - resetting ALL state`);
 
       // Reset ALL job-specific state completely
@@ -60,7 +42,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
       // Update resume ID from the new job
       setResumeId(job.resume_id || null);
     }
-  }, [job.id]);
+  }, [job?.id, job?.resume_id]);
 
   // Fetch user's resume data when component mounts
   useEffect(() => {
@@ -238,6 +220,24 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
   const isEasyApply = () => metadata.is_easy_apply === true ? 'Yes' : 'No';
   const getSalary = () => metadata.salary || 'Not specified';
   const description = job.description || metadata.job_summary || "No description available";
+
+  // Validate job object after hooks
+  if (!job || !job.id) {
+    console.error("❌ JobDetail received invalid job:", job);
+    return (
+        <div className="p-8 bg-white rounded-xl shadow text-center">
+          <div className="text-red-400 mb-4">
+            <svg className="h-12 w-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Invalid Job Data</h3>
+          <p className="text-gray-600">
+            The selected job data is invalid. Please try selecting a different job.
+          </p>
+        </div>
+    );
+  }
 
   return (
       <div className="bg-white/80 backdrop-blur-lg shadow-xl rounded-2xl border border-white/20 overflow-hidden">
