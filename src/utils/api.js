@@ -1,4 +1,3 @@
-// src/utils/api.js - Updated API client to match your OpenAPI specification
 import { auth } from '../firebase/firebase';
 
 // API Base URL - configured for DuckDNS with fallback

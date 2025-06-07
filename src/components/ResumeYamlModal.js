@@ -23,7 +23,7 @@ Font.register({
   ]
 });
 
-StyleSheet.create({
+const styles = StyleSheet.create({
   page: {
     paddingTop: 50,
     paddingBottom: 50,
