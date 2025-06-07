@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const ResumeDocument = ({ data, userLocation }) => {
+const ResumeDocument = ({ data }) => {
   return (
       <Document>
         <Page size="A4" style={styles.page}>
@@ -79,7 +79,7 @@ const ResumeDocument = ({ data, userLocation }) => {
                   {[
                     data.basic.email,
                     data.basic.phone,
-                    userLocation, // Include user location from Firebase
+                    data.basic.address, // Include user location from Firebase
                     ...(data.basic.websites || [])
                   ].filter(Boolean).join(' | ')}
                 </Text>
@@ -371,12 +371,6 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                 size="lg"
                             />
 
-                            {/* Location info note */}
-                            <div className="p-4 bg-gray-50 rounded-lg">
-                              <p className="text-sm text-gray-600">
-                                <strong>Note:</strong> Your location is managed in your account settings and will automatically appear in the resume header alongside your contact information.
-                              </p>
-                            </div>
                           </div>
                       )}
 
