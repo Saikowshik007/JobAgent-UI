@@ -16,34 +16,71 @@ Font.register({
 });
 
 // PDF styles
-const styles = StyleSheet.create({
+const styles =  StyleSheet.create({
   page: {
-    paddingTop: 40,
-    paddingBottom: 40,
+    paddingTop: 50,
+    paddingBottom: 50,
     paddingHorizontal: 50,
-    fontSize: 10,
+    fontSize: 11, // Slightly larger for better OCR
     fontFamily: 'Calibri',
+    lineHeight: 1.4, // Better line spacing
+    color: '#000000', // Pure black for OCR
+  },
+  header: {
+    fontSize: 16, // Larger name
+    textAlign: 'left', // Left-align instead of center
+    fontWeight: 'bold',
+    marginBottom: 5,
+    // Remove text transform for ATS
+  },
+  contact: {
+    textAlign: 'left', // Left-align contact info
+    fontSize: 10,
+    marginBottom: 15,
     lineHeight: 1.3,
   },
-  header: { fontSize: 13, textAlign: 'center', fontWeight: 'bold', marginBottom: 2, textTransform: 'uppercase' },
-  contact: { textAlign: 'center', fontSize: 9, marginBottom: 8 },
   sectionTitle: {
-    fontSize: 10,
+    fontSize: 12, // Larger section headers
     fontWeight: 'bold',
-    textTransform: 'uppercase',
-    marginTop: 8,
-    marginBottom: 3,
-    borderBottomWidth: 1,
-    borderBottomColor: '#000000',
-    borderBottomStyle: 'solid',
-    paddingBottom: 1,
+    marginTop: 15,
+    marginBottom: 8,
+    // Remove borders and transforms for ATS
+    color: '#000000',
   },
-  jobBlock: { marginBottom: 6 },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  jobTitle: { fontStyle: 'italic' },
-  bullet: { marginLeft: 10, marginBottom: 1 },
-  textNormal: { marginBottom: 3 },
-  projectTitle: { fontWeight: 'bold', color: 'blue', textDecoration: 'none' },
+  jobBlock: {
+    marginBottom: 10, // More spacing between jobs
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  jobTitle: {
+    fontStyle: 'normal', // Remove italics for ATS
+    fontWeight: 'normal',
+  },
+  bullet: {
+    marginLeft: 15, // Standard bullet indent
+    marginBottom: 3,
+    lineHeight: 1.4,
+  },
+  textNormal: {
+    marginBottom: 5,
+    lineHeight: 1.4,
+  },
+  // Simplified project styling
+  projectTitle: {
+    fontWeight: 'bold',
+    color: '#000000', // Remove blue color
+    // Remove links for ATS compatibility
+  },
+  projectTech: {
+    fontSize: 10,
+    color: '#000000',
+    marginLeft: 0, // Don't indent
+    marginTop: 2,
+    fontStyle: 'normal', // Remove italics
+  },
 });
 
 // PDF Document component
