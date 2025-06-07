@@ -2,12 +2,11 @@
 import { auth } from '../firebase/firebase';
 
 // API Base URL - configured for DuckDNS with fallback
-// const API_BASE_URL = process.env.REACT_APP_API_BASE_URL ||
-//   (process.env.NODE_ENV === 'production'
-//     ? 'https://jobtrackai.duckdns.org'
-//     : 'http://localhost:8000'
-//   );
-const API_BASE_URL = 'http://127.0.0.1:8000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? 'https://jobtrackai.duckdns.org'
+    : 'http://localhost:8000'
+  );
 
 // Helper to log headers for debugging
 function logHeaders(headers) {
