@@ -25,68 +25,40 @@ Font.register({
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 50,
-    paddingBottom: 50,
+    paddingTop: 40,
+    paddingBottom: 40,
     paddingHorizontal: 50,
-    fontSize: 11, // Slightly larger for better OCR
+    fontSize: 11,
     fontFamily: 'Calibri',
-    lineHeight: 1.4, // Better line spacing
-    color: '#000000', // Pure black for OCR
-  },
-  header: {
-    fontSize: 16, // Larger name
-    textAlign: 'left', // Left-align instead of center
-    fontWeight: 'bold',
-    marginBottom: 5,
-    // Remove text transform for ATS
-  },
-  contact: {
-    textAlign: 'left', // Left-align contact info
-    fontSize: 10,
-    marginBottom: 15,
-    lineHeight: 1.3,
-  },
-  sectionTitle: {
-    fontSize: 12, // Larger section headers
-    fontWeight: 'bold',
-    marginTop: 15,
-    marginBottom: 8,
-    // Remove borders and transforms for ATS
+    lineHeight: 1.4,
     color: '#000000',
   },
-  jobBlock: {
-    marginBottom: 10, // More spacing between jobs
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 2,
-  },
-  jobTitle: {
-    fontStyle: 'normal', // Remove italics for ATS
-    fontWeight: 'normal',
-  },
-  bullet: {
-    marginLeft: 15, // Standard bullet indent
-    marginBottom: 3,
-    lineHeight: 1.4,
-  },
-  textNormal: {
-    marginBottom: 5,
-    lineHeight: 1.4,
-  },
-  // Simplified project styling
-  projectTitle: {
+  header: { fontSize: 16, textAlign: 'left', fontWeight: 'bold', marginBottom: 5 },
+  contact: { textAlign: 'left', fontSize: 10, marginBottom: 12 },
+  sectionTitle: {
+    fontSize: 12,
     fontWeight: 'bold',
-    color: '#000000', // Remove blue color
-    // Remove links for ATS compatibility
+    marginTop: 12,
+    marginBottom: 5,
+    color: '#000000',
+  },
+  jobBlock: { marginBottom: 8 },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  jobTitle: { fontWeight: 'normal' },
+  bullet: { marginLeft: 15, marginBottom: 2 },
+  textNormal: { marginBottom: 4 },
+  projectTitle: { fontWeight: 'bold', color: '#000000' },
+  projectTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 2,
+    flexWrap: 'wrap'
   },
   projectTech: {
     fontSize: 10,
     color: '#000000',
-    marginLeft: 0, // Don't indent
-    marginTop: 2,
-    fontStyle: 'normal', // Remove italics
+    marginLeft: 8,
+    marginTop: 1
   },
 });
 
