@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const ResumeDocument = ({ data, userLocation }) => {
+const ResumeDocument = ({ data }) => {
   return (
       <Document>
         <Page size="A4" style={styles.page}>
@@ -79,7 +79,7 @@ const ResumeDocument = ({ data, userLocation }) => {
                   {[
                     data.basic.email,
                     data.basic.phone,
-                    userLocation, // Include user location from Firebase
+                    data.basic.address, // Use address from basic data
                     ...(data.basic.websites || [])
                   ].filter(Boolean).join(' | ')}
                 </Text>
@@ -195,10 +195,6 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
   const [yamlString, setYamlString] = useState('');
   const [includeObjective, setIncludeObjective] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
-  const [userLocation, setUserLocation] = useState('');
-
-  // Get user settings to fetch location
-  const { getUserSettings } = useAuth();
 
   // Use custom hooks for resume data and drag & drop
   const resumeHook = useResumeData();
@@ -229,14 +225,12 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
       }
     };
 
-    loadUserLocation();
-
     const handleEscape = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', handleEscape);
     return () => {
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [yamlContent, onClose, setResumeData, getUserSettings]);
+  }, [yamlContent, onClose, setResumeData]);
 
   const updateYamlString = (newData) => {
     try {
@@ -299,7 +293,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
           {/* Content */}
           <div className="flex-1 overflow-hidden p-6 flex flex-col">
             {/* Location Notice */}
-            {userLocation && (
+            {resumeData.basic?.address && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center space-x-2">
                     <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -307,7 +301,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                     <p className="text-sm text-blue-800">
-                      <strong>Location:</strong> Your location "{userLocation}" from your profile will appear on the resume header.
+                      <strong>Location:</strong> "{resumeData.basic.address}" will appear in the resume header.
                     </p>
                   </div>
                 </div>
@@ -374,7 +368,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                             {/* Location info note */}
                             <div className="p-4 bg-gray-50 rounded-lg">
                               <p className="text-sm text-gray-600">
-                                <strong>Note:</strong> Your location is managed in your account settings and will automatically appear in the resume header alongside your contact information.
+                                <strong>Note:</strong> Location is managed in the "Address" field above and will appear in the resume header alongside your contact information.
                               </p>
                             </div>
                           </div>
@@ -937,7 +931,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                   <div className="col-span-3 border rounded bg-gray-100 overflow-hidden">
                     {resumeData && (
                         <PDFViewer width="100%" height="100%" className="rounded" key={JSON.stringify(resumeData)}>
-                          <ResumeDocument data={resumeData} userLocation={userLocation} />
+                          <ResumeDocument data={resumeData} />
                         </PDFViewer>
                     )}
                   </div>
