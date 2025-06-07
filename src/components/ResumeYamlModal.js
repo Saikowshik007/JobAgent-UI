@@ -1,7 +1,8 @@
-// ResumeYamlModal.js - Updated with location in header
+// ResumeYamlModal.js - Updated with location support and complete Experience section
 import React, { useState, useEffect, useRef } from 'react';
 import yaml from 'js-yaml';
 import { Document, Page, Text, View, StyleSheet, PDFViewer, Font, Link } from '@react-pdf/renderer';
+import { useAuth } from "../contexts/AuthContext";
 import { useResumeData, useDragAndDrop } from '../hooks/useResumeData';
 import {
   DragHandle,
@@ -66,35 +67,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const ResumeDocument = ({ data }) => {
-  // Build contact information array including location
-  const buildContactInfo = () => {
-    const contactItems = [];
-
-    // Add email if exists
-    if (data.basic?.email) {
-      contactItems.push(data.basic.email);
-    }
-
-    // Add phone if exists
-    if (data.basic?.phone) {
-      contactItems.push(data.basic.phone);
-    }
-
-    // Add location if exists
-    if (data.basic?.address) {
-      contactItems.push(data.basic.address);
-    }
-
-    // Add websites if they exist
-    if (data.basic?.websites && Array.isArray(data.basic.websites)) {
-      const validWebsites = data.basic.websites.filter(website => website && website.trim());
-      contactItems.push(...validWebsites);
-    }
-
-    return contactItems;
-  };
-
+const ResumeDocument = ({ data, userLocation }) => {
   return (
       <Document>
         <Page size="A4" style={styles.page}>
@@ -103,7 +76,12 @@ const ResumeDocument = ({ data }) => {
               <>
                 <Text style={styles.header}>{data.basic.name || 'Your Name'}</Text>
                 <Text style={styles.contact}>
-                  {buildContactInfo().join(' | ')}
+                  {[
+                    data.basic.email,
+                    data.basic.phone,
+                    userLocation, // Include user location from Firebase
+                    ...(data.basic.websites || [])
+                  ].filter(Boolean).join(' | ')}
                 </Text>
               </>
           )}
@@ -217,6 +195,10 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
   const [yamlString, setYamlString] = useState('');
   const [includeObjective, setIncludeObjective] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
+  const [userLocation, setUserLocation] = useState('');
+
+  // Get user settings to fetch location
+  const { getUserSettings } = useAuth();
 
   // Use custom hooks for resume data and drag & drop
   const resumeHook = useResumeData();
@@ -235,12 +217,26 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
       }
     }
 
+    // Load user location from Firebase
+    const loadUserLocation = async () => {
+      try {
+        const settings = await getUserSettings();
+        if (settings && settings.location) {
+          setUserLocation(settings.location);
+        }
+      } catch (err) {
+        console.error("Error loading user location:", err);
+      }
+    };
+
+    loadUserLocation();
+
     const handleEscape = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', handleEscape);
     return () => {
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [yamlContent, onClose, setResumeData]);
+  }, [yamlContent, onClose, setResumeData, getUserSettings]);
 
   const updateYamlString = (newData) => {
     try {
@@ -302,6 +298,21 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
 
           {/* Content */}
           <div className="flex-1 overflow-hidden p-6 flex flex-col">
+            {/* Location Notice */}
+            {userLocation && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <p className="text-sm text-blue-800">
+                      <strong>Location:</strong> Your location "{userLocation}" from your profile will appear on the resume header.
+                    </p>
+                  </div>
+                </div>
+            )}
+
             {/* Tabs */}
             <div className="border-b border-gray-200 mb-6">
               <nav className="-mb-px flex space-x-8" aria-label="Tabs">
@@ -359,6 +370,13 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                 onRemoveWebsite={resumeHook.removeWebsite}
                                 size="lg"
                             />
+
+                            {/* Location info note */}
+                            <div className="p-4 bg-gray-50 rounded-lg">
+                              <p className="text-sm text-gray-600">
+                                <strong>Note:</strong> Your location is managed in your account settings and will automatically appear in the resume header alongside your contact information.
+                              </p>
+                            </div>
                           </div>
                       )}
 
@@ -467,6 +485,143 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                           </div>
                                         </div>
                                     ))}
+                                  </div>
+                                </DraggableItem>
+                            ))}
+                          </div>
+                      )}
+
+                      {/* Experience */}
+                      {activeTab === "experience" && (
+                          <div className="space-y-8">
+                            <SectionHeader
+                                title="Work Experience"
+                                onAdd={resumeHook.addExperience}
+                                addButtonText="+ Add Experience"
+                                showDragTip={(resumeData.experiences || []).length > 1}
+                                size="lg"
+                            />
+
+                            {(resumeData.experiences || []).map((exp, expIndex) => (
+                                <DraggableItem
+                                    key={expIndex}
+                                    onDragStart={(e) => dragHook.handleDragStart(e, 'experience', expIndex)}
+                                    onDragEnd={dragHook.handleDragEnd}
+                                    onDragOver={dragHook.handleDragOver}
+                                    onDrop={(e) => dragHook.handleDrop(e, 'experience', expIndex)}
+                                    isDragging={dragHook.draggedItem?.type === 'experience' && dragHook.draggedItem?.sectionIndex === expIndex && dragHook.draggedItem?.itemIndex === null}
+                                    className="mt-8 p-6 border border-gray-200 rounded-lg relative bg-white hover:shadow-md transition-shadow"
+                                >
+                                  <div className="absolute top-4 left-4">
+                                    <DragHandle />
+                                  </div>
+                                  <button
+                                      type="button"
+                                      onClick={() => resumeHook.removeExperience(expIndex)}
+                                      className="absolute top-4 right-4 text-red-500 hover:text-red-700"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                  <div className="ml-12">
+                                    <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-6">
+                                      <div>
+                                        <label className="block text-base font-medium text-gray-700 mb-3">
+                                          Company
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                            value={exp.company || ""}
+                                            onChange={(e) => resumeHook.handleExperienceChange(expIndex, 'company', e.target.value)}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-base font-medium text-gray-700 mb-3">
+                                          Location
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                            value={exp.location || ""}
+                                            onChange={(e) => resumeHook.handleExperienceChange(expIndex, 'location', e.target.value)}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    {(exp.titles || []).map((title, titleIndex) => (
+                                        <div key={titleIndex} className="mt-6">
+                                          <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-3 sm:gap-x-6">
+                                            <div className="sm:col-span-1">
+                                              <label className="block text-base font-medium text-gray-700 mb-3">
+                                                Job Title
+                                              </label>
+                                              <input
+                                                  type="text"
+                                                  className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                                  value={title.name || title.title || ""}
+                                                  onChange={(e) => resumeHook.handleTitleChange(expIndex, titleIndex, 'name', e.target.value)}
+                                              />
+                                            </div>
+                                            <div className="sm:col-span-1">
+                                              <label className="block text-base font-medium text-gray-700 mb-3">
+                                                Start Date
+                                              </label>
+                                              <input
+                                                  type="text"
+                                                  className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                                  value={title.startdate || ""}
+                                                  onChange={(e) => resumeHook.handleTitleChange(expIndex, titleIndex, 'startdate', e.target.value)}
+                                                  placeholder="January 2023"
+                                              />
+                                            </div>
+                                            <div className="sm:col-span-1">
+                                              <label className="block text-base font-medium text-gray-700 mb-3">
+                                                End Date
+                                              </label>
+                                              <input
+                                                  type="text"
+                                                  className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm text-base border-gray-300 rounded-lg p-4"
+                                                  value={title.enddate || ""}
+                                                  onChange={(e) => resumeHook.handleTitleChange(expIndex, titleIndex, 'enddate', e.target.value)}
+                                                  placeholder="Present"
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                    ))}
+
+                                    <div className="mt-8">
+                                      <label className="block text-base font-medium text-gray-700 mb-4">
+                                        Highlights/Responsibilities
+                                      </label>
+                                      {(exp.highlights || []).length > 1 && (
+                                          <div className="text-xs text-gray-500 mb-3">
+                                            Drag to reorder highlights
+                                          </div>
+                                      )}
+                                      {(exp.highlights || []).map((highlight, highlightIndex) => (
+                                          <HighlightItem
+                                              key={highlightIndex}
+                                              highlight={highlight}
+                                              onChange={(e) => resumeHook.handleHighlightChange(expIndex, highlightIndex, e.target.value)}
+                                              onRemove={() => resumeHook.removeHighlight(expIndex, highlightIndex)}
+                                              canRemove={(exp.highlights || []).length > 1}
+                                              placeholder="Describe an achievement or responsibility"
+                                              size="lg"
+                                              enableDrag={true}
+                                              onDragStart={(e) => dragHook.handleDragStart(e, 'experience', expIndex, highlightIndex)}
+                                              onDragEnd={dragHook.handleDragEnd}
+                                              onDragOver={dragHook.handleDragOver}
+                                              onDrop={(e) => dragHook.handleDrop(e, 'experience', expIndex, highlightIndex)}
+                                              isDragging={dragHook.draggedItem?.type === 'experience' && dragHook.draggedItem?.sectionIndex === expIndex && dragHook.draggedItem?.itemIndex === highlightIndex}
+                                          />
+                                      ))}
+                                      <AddButton onClick={() => resumeHook.addHighlight(expIndex)} size="lg">
+                                        + Add Highlight
+                                      </AddButton>
+                                    </div>
                                   </div>
                                 </DraggableItem>
                             ))}
@@ -782,7 +937,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                   <div className="col-span-3 border rounded bg-gray-100 overflow-hidden">
                     {resumeData && (
                         <PDFViewer width="100%" height="100%" className="rounded" key={JSON.stringify(resumeData)}>
-                          <ResumeDocument data={resumeData} />
+                          <ResumeDocument data={resumeData} userLocation={userLocation} />
                         </PDFViewer>
                     )}
                   </div>
