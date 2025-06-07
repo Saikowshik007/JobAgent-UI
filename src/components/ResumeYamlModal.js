@@ -359,19 +359,6 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                 onRemoveWebsite={resumeHook.removeWebsite}
                                 size="lg"
                             />
-
-                            {/* Contact Preview */}
-                            <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
-                              <div className="text-sm text-gray-600 mb-2">Contact Line Preview:</div>
-                              <div className="text-center text-sm text-gray-800">
-                                {[
-                                  resumeData.basic?.email,
-                                  resumeData.basic?.phone,
-                                  resumeData.basic?.address,
-                                  ...(resumeData.basic?.websites || []).filter(w => w && w.trim())
-                                ].filter(Boolean).join(' | ') || 'Contact information will appear here'}
-                              </div>
-                            </div>
                           </div>
                       )}
 
