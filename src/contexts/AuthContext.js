@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "firebase/auth";
 import { auth, db } from "../firebase/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 
@@ -12,15 +17,16 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  async function signup(email, password, openaiApiKey = "", location = "") {
+
+  // Updated signup function without LinkedIn credentials
+  async function signup(email, password, openaiApiKey = "") {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
 
-      // Store configuration in Firestore with location
+      // Store configuration in Firestore without LinkedIn credentials
       await setDoc(doc(db, "users", userCredential.user.uid), {
         email,
         openaiApiKey,
-        location, // Add location field
         createdAt: new Date().toISOString(),
         settings: {
           selenium: {
@@ -49,7 +55,6 @@ export function AuthProvider({ children }) {
 
   async function getUserSettings() {
     if (!currentUser) return null;
-
     const docRef = doc(db, "users", currentUser.uid);
     const docSnap = await getDoc(docRef);
 
@@ -62,7 +67,6 @@ export function AuthProvider({ children }) {
 
   async function updateUserSettings(settings) {
     if (!currentUser) return;
-
     const userRef = doc(db, "users", currentUser.uid);
     await setDoc(userRef, {
       ...settings,
@@ -89,8 +93,8 @@ export function AuthProvider({ children }) {
   };
 
   return (
-      <AuthContext.Provider value={value}>
-        {!loading && children}
-      </AuthContext.Provider>
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
   );
 }
