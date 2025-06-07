@@ -47,104 +47,127 @@ const styles = StyleSheet.create({
 });
 
 // PDF Document component
-const ResumeDocument = ({ data }) => (
-    <Document>
-      <Page size="A4" style={styles.page}>
-        {data.basic && (
-            <>
-              <Text style={styles.header}>{data.basic.name}</Text>
-              <Text style={styles.contact}>
-                {[data.basic.email, data.basic.phone, ...(data.basic.websites || [])].filter(Boolean).join(' | ')}
-              </Text>
-            </>
-        )}
+const ResumeDocument = ({ data }) => {
+  return (
+      <Document>
+        <Page size="A4" style={styles.page}>
+          {/* Header */}
+          {data.basic && (
+              <>
+                <Text style={styles.header}>{data.basic.name || 'Your Name'}</Text>
+                <Text style={styles.contact}>
+                  {[
+                    data.basic.email,
+                    data.basic.phone,
+                    data.basic.address, // Include user location from Firebase
+                    ...(data.basic.websites || [])
+                  ].filter(Boolean).join(' | ')}
+                </Text>
+              </>
+          )}
 
-        {data.objective && data.objective.trim() && (
-            <>
-              <Text style={styles.sectionTitle}>Objective</Text>
-              <Text style={styles.textNormal}>{data.objective}</Text>
-            </>
-        )}
+          {/* Objective Section - Only show if exists and has content */}
+          {data.objective && data.objective.trim() && (
+              <>
+                <Text style={styles.sectionTitle}>Professional Summary</Text>
+                <Text style={styles.textNormal}>{data.objective}</Text>
+              </>
+          )}
 
-        {data.experiences && (
-            <>
-              <Text style={styles.sectionTitle}>Experience</Text>
-              {data.experiences.map((exp, idx) => (
-                  <View key={idx} style={styles.jobBlock}>
-                    <View style={styles.row}>
-                      <Text style={{ fontWeight: 'bold' }}>{exp.company}</Text>
-                      <Text>{exp.titles?.[0]?.startdate} - {exp.titles?.[0]?.enddate}</Text>
+          {/* Experience Section */}
+          {data.experiences && data.experiences.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Experience</Text>
+                {data.experiences.map((exp, idx) => (
+                    <View key={idx} style={styles.jobBlock}>
+                      <View style={styles.row}>
+                        <Text style={{ fontWeight: 'bold' }}>{exp.company || 'Company Name'}</Text>
+                        <Text>{exp.titles?.[0]?.startdate} - {exp.titles?.[0]?.enddate}</Text>
+                      </View>
+                      <View style={styles.row}>
+                        <Text style={styles.jobTitle}>{exp.titles?.[0]?.name || exp.titles?.[0]?.title}</Text>
+                        <Text style={styles.jobTitle}>{exp.location}</Text>
+                      </View>
+                      {exp.highlights?.map((point, i) => (
+                          <Text key={i} style={styles.bullet}>• {point}</Text>
+                      ))}
                     </View>
-                    <View style={styles.row}>
-                      <Text style={styles.jobTitle}>{exp.titles?.[0]?.name}</Text>
-                      <Text style={styles.jobTitle}>{exp.location}</Text>
+                ))}
+              </>
+          )}
+
+          {/* Projects Section */}
+          {data.projects && data.projects.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Projects</Text>
+                {data.projects.map((proj, idx) => (
+                    <View key={idx} style={styles.jobBlock}>
+                      <View style={styles.projectTitleRow}>
+                        {proj.link ? (
+                            <Link src={proj.link} style={styles.projectTitle}>{proj.name}</Link>
+                        ) : (
+                            <Text style={{ fontWeight: 'bold' }}>{proj.name}</Text>
+                        )}
+                        {proj.technologies && proj.technologies.trim() && (
+                            <Text style={styles.projectTech}>({proj.technologies})</Text>
+                        )}
+                      </View>
+                      {proj.highlights?.map((point, i) => (
+                          <Text key={i} style={styles.bullet}>• {point}</Text>
+                      ))}
                     </View>
-                    {exp.highlights?.map((point, i) => (
-                        <Text key={i} style={styles.bullet}>• {point}</Text>
-                    ))}
-                  </View>
-              ))}
-            </>
-        )}
+                ))}
+              </>
+          )}
 
-        {data.projects && (
-            <>
-              <Text style={styles.sectionTitle}>Projects</Text>
-              {data.projects.map((proj, idx) => (
-                  <View key={idx} style={styles.jobBlock}>
-                    {proj.link ? (
-                        <Link src={proj.link} style={styles.projectTitle}>{proj.name}</Link>
-                    ) : (
-                        <Text style={{ fontWeight: 'bold' }}>{proj.name}</Text>
-                    )}
-                    {proj.highlights?.map((point, i) => (
-                        <Text key={i} style={styles.bullet}>• {point}</Text>
-                    ))}
-                  </View>
-              ))}
-            </>
-        )}
-
-        {data.education && (
-            <>
-              <Text style={styles.sectionTitle}>Education</Text>
-              {data.education.map((edu, idx) => (
-                  <View key={idx} style={styles.jobBlock}>
-                    <View style={styles.row}>
-                      <Text style={{ fontWeight: 'bold' }}>{edu.school}, {edu.degrees?.[0]?.names?.join(', ')}</Text>
-                      <Text>{edu.degrees?.[0]?.dates}</Text>
-                    </View>
-                  </View>
-              ))}
-            </>
-        )}
-
-        {data.skills && (
-            <>
-              <Text style={styles.sectionTitle}>Skills</Text>
-              {data.skills.map((skillCategory, idx) => (
-                  <View key={idx} style={{ marginBottom: 3 }}>
-                    <Text style={{ fontWeight: 'bold', marginBottom: 1 }}>{skillCategory.category}:</Text>
-                    {skillCategory.subcategories ? (
-                        // Handle subcategories structure
-                        skillCategory.subcategories.map((subcat, subIdx) => (
-                            <Text key={subIdx} style={{ marginLeft: 10, marginBottom: 1 }}>
-                              <Text style={{ fontWeight: 'bold' }}>{subcat.name}:</Text> {subcat.skills?.join(', ') || 'No skills'}
-                            </Text>
-                        ))
-                    ) : (
-                        // Handle direct skills list (legacy format)
-                        <Text style={{ marginLeft: 10 }}>
-                          {skillCategory.skills?.join(', ') || 'No skills listed'}
+          {/* Education Section */}
+          {data.education && data.education.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Education</Text>
+                {data.education.map((edu, idx) => (
+                    <View key={idx} style={styles.jobBlock}>
+                      <View style={styles.row}>
+                        <Text style={{ fontWeight: 'bold' }}>
+                          {edu.school}, {edu.degrees?.[0]?.names?.join(', ')}
+                          {edu.degrees?.[0]?.gpa && ` (GPA: ${edu.degrees?.[0]?.gpa})`}
                         </Text>
-                    )}
-                  </View>
-              ))}
-            </>
-        )}
-      </Page>
-    </Document>
-);
+                        <Text>{edu.degrees?.[0]?.dates}</Text>
+                      </View>
+                    </View>
+                ))}
+              </>
+          )}
+
+          {/* Skills Section */}
+          {data.skills && data.skills.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Skills</Text>
+                {data.skills.map((skillCategory, idx) => {
+                  // Handle subcategories structure (Technical skills)
+                  if (skillCategory.subcategories) {
+                    return skillCategory.subcategories.map((subcat, subIdx) => (
+                        <Text key={`${idx}-${subIdx}`} style={styles.textNormal}>
+                          <Text style={{ fontWeight: 'bold' }}>{subcat.name}:</Text> {(subcat.skills || []).join(', ')}
+                        </Text>
+                    ));
+                  }
+                  // Handle direct skills structure (Non-technical skills)
+                  else if (skillCategory.skills) {
+                    return (
+                        <Text key={idx} style={styles.textNormal}>
+                          <Text style={{ fontWeight: 'bold' }}>{skillCategory.category}:</Text> {skillCategory.skills.join(', ')}
+                        </Text>
+                    );
+                  }
+                  return null;
+                })}
+              </>
+          )}
+        </Page>
+      </Document>
+  );
+};
+
 
 const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, resumeYamlVersion = 0, onUploadComplete }) => {
   const [status, setStatus] = useState('checking');
