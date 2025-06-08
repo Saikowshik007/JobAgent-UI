@@ -106,17 +106,62 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
       }
 
       const settings = await getUserSettings() || {};
+
+      // Smart objective detection logic:
+      const hasObjectiveInResume = userResumeData.objective &&
+          userResumeData.objective.trim().length > 0;
+
+      // Priority: 1. User setting, 2. Auto-detect from resume, 3. Default true
+      let includeObjective;
+
+      if (settings.settings?.resume?.include_objective !== undefined) {
+        // User has explicitly set a preference
+        includeObjective = settings.settings.resume.include_objective;
+        console.log(`Using user setting: include_objective = ${includeObjective}`);
+      } else if (hasObjectiveInResume) {
+        // User has an objective in their resume, so they probably want it
+        includeObjective = true;
+        console.log(`Auto-detected: User has objective in resume, including it`);
+      } else {
+        // No objective in resume, but still default to true for new users
+        includeObjective = true;
+        console.log(`Default: No objective in resume, but defaulting to true`);
+      }
+
       const requestData = {
-        ...settings,
-        resumeData: userResumeData
+        job_id: job.id,
+        customize: true,
+        template: "standard",
+        resume_data: userResumeData,
+        include_objective: includeObjective
       };
 
-      console.log("Sending resume data for job:", job.id);
+      console.log("Resume generation request:", {
+        jobId: job.id,
+        hasResumeData: !!userResumeData,
+        includeObjective
+      });
 
-      const response = await resumeApi.generateResume(job.id, requestData, true);
+      // Use the updated API
+      const response = await fetch('/api/resume/generate?handle_existing=replace', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser?.uid,
+          ...(settings.openaiApiKey && { 'X-Api-Key': settings.openaiApiKey })
+        },
+        body: JSON.stringify(requestData)
+      });
 
-      if (response && response.resume_id) {
-        setResumeId(response.resume_id);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to generate resume');
+      }
+
+      const result = await response.json();
+
+      if (result && result.resume_id) {
+        setResumeId(result.resume_id);
         setShowStatusTracker(true);
         onStatusChange(job.id, 'RESUME_GENERATED');
       } else {
@@ -522,18 +567,31 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
         </div>
 
         {/* Enhanced Error/Success Messages */}
-        {!userResumeData && (
-            <div className="mx-6 mb-4 animate-slide-down">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 shadow-sm">
-                <div className="flex items-start space-x-3">
-                  <svg className="h-5 w-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div>
-                    <p className="text-sm font-medium text-yellow-800">No resume data found</p>
-                    <p className="text-sm text-yellow-700 mt-1">Please update your resume in Settings before generating a customized resume.</p>
-                  </div>
-                </div>
+        {userResumeData && (
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center space-x-2 text-sm text-blue-800">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>
+        Resume will {
+                  (() => {
+                    const settings = formData?.settings; // You'll need to pass this down or get it
+                    const hasObjective = userResumeData.objective?.trim().length > 0;
+
+                    if (settings?.resume?.include_objective !== undefined) {
+                      return settings.resume.include_objective ? 'include' : 'exclude';
+                    } else if (hasObjective) {
+                      return 'include';
+                    } else {
+                      return 'include'; // default
+                    }
+                  })()
+                } an objective section
+      </span>
+                <span className="text-blue-600">
+        (Change in Settings)
+      </span>
               </div>
             </div>
         )}

@@ -419,7 +419,47 @@ function Settings() {
                             showToggle={false}
                         />
                       </div>
-
+                      <div className="p-4 border-b border-gray-200">
+                        <h4 className="text-md font-medium text-gray-800 mb-4">Generation Preferences</h4>
+                        <div className="space-y-4">
+                          <div className="flex items-start">
+                            <div className="flex items-center h-5">
+                              <input
+                                  id="include_objective"
+                                  name="include_objective"
+                                  type="checkbox"
+                                  className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                                  checked={formData.settings?.resume?.include_objective ?? true}
+                                  onChange={(e) => {
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      settings: {
+                                        ...prev.settings,
+                                        resume: {
+                                          ...prev.settings.resume,
+                                          include_objective: e.target.checked
+                                        }
+                                      }
+                                    }));
+                                  }}
+                              />
+                            </div>
+                            <div className="ml-3 text-sm">
+                              <label htmlFor="include_objective" className="font-medium text-gray-700">
+                                Always Include Objective Section
+                              </label>
+                              <p className="text-gray-500 mt-1">
+                                When enabled, generated resumes will always include an objective/summary section. When disabled, the objective section will be omitted.
+                                {resumeData.objective && resumeData.objective.trim().length > 0 && (
+                                    <span className="block mt-1 text-blue-600">
+                ✓ You have an objective in your resume template
+              </span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       {/* Education */}
                       <div className="p-4 border-b border-gray-200">
                         <div className="flex justify-between items-center mb-4">
