@@ -89,7 +89,7 @@ function Settings() {
     }
 
     loadUserSettings();
-  }, [getUserSettings, currentUser, setResumeData]); 
+  }, [getUserSettings, currentUser, setResumeData]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
