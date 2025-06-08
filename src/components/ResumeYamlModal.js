@@ -1,4 +1,4 @@
-// ResumeYamlModal.js - Updated with location support and complete Experience section
+// ResumeYamlModal.js - Fixed with proper type checking for technologies field
 import React, { useState, useEffect, useRef } from 'react';
 import yaml from 'js-yaml';
 import { Document, Page, Text, View, StyleSheet, PDFViewer, Font, Link } from '@react-pdf/renderer';
@@ -87,7 +87,7 @@ const ResumeDocument = ({ data }) => {
           )}
 
           {/* Objective Section - Only show if exists and has content */}
-          {data.objective && data.objective.trim() && (
+          {data.objective && typeof data.objective === 'string' && data.objective.trim() && (
               <>
                 <Text style={styles.sectionTitle}>Professional Summary</Text>
                 <Text style={styles.textNormal}>{data.objective}</Text>
@@ -128,7 +128,7 @@ const ResumeDocument = ({ data }) => {
                         ) : (
                             <Text style={{ fontWeight: 'bold' }}>{proj.name}</Text>
                         )}
-                        {proj.technologies && proj.technologies.trim() && (
+                        {proj.technologies && typeof proj.technologies === 'string' && proj.technologies.trim() && (
                             <Text style={styles.projectTech}>({proj.technologies})</Text>
                         )}
                       </View>
@@ -211,7 +211,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
         const parsed = yaml.load(yamlContent);
         setResumeData(parsed);
         setYamlString(yamlContent);
-        setIncludeObjective(parsed.objective && parsed.objective.trim() !== '');
+        setIncludeObjective(parsed.objective && typeof parsed.objective === 'string' && parsed.objective.trim() !== '');
       } catch (err) {
         console.error("Error parsing YAML:", err);
       }
@@ -221,7 +221,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
     const loadUserLocation = async () => {
       try {
         const settings = await getUserSettings();
-        if (settings && settings.basic.address) {
+        if (settings && settings.basic && settings.basic.address) {
           setUserLocation(settings.basic.address);
         }
       } catch (err) {
@@ -662,7 +662,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                                       <div className="text-sm text-gray-600 mb-2">Preview:</div>
                                       <div className="flex items-baseline flex-wrap">
                                         <span className="font-bold text-blue-600">{project.name || "Project Name"}</span>
-                                        {project.technologies && project.technologies.trim() && (
+                                        {project.technologies && typeof project.technologies === 'string' && project.technologies.trim() && (
                                             <span className="text-xs text-gray-500 italic ml-2">({project.technologies})</span>
                                         )}
                                       </div>
