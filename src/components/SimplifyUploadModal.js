@@ -18,15 +18,15 @@ Font.register({
 // PDF styles
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 40,
-    paddingBottom: 40,
-    paddingHorizontal: 50,
+    paddingTop: 30,
+    paddingBottom: 30,
+    paddingHorizontal: 40,
     fontSize: 10,
     fontFamily: 'Calibri',
     lineHeight: 1.3,
   },
   header: { fontSize: 13, textAlign: 'center', fontWeight: 'bold', marginBottom: 2, textTransform: 'uppercase' },
-  contact: { textAlign: 'center', fontSize: 9, marginBottom: 8 },
+  contact: { textAlign: 'center', fontSize: 9, marginBottom: 5 },
   sectionTitle: {
     fontSize: 10,
     fontWeight: 'bold',
@@ -38,12 +38,25 @@ const styles = StyleSheet.create({
     borderBottomStyle: 'solid',
     paddingBottom: 1,
   },
-  jobBlock: { marginBottom: 6 },
+  jobBlock: { marginBottom: 5 },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   jobTitle: { fontStyle: 'italic' },
-  bullet: { marginLeft: 10, marginBottom: 1 },
+  bullet: { marginLeft: 8, marginBottom: 1 },
   textNormal: { marginBottom: 3 },
   projectTitle: { fontWeight: 'bold', color: 'blue', textDecoration: 'none' },
+  projectTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 2,
+    flexWrap: 'wrap'
+  },
+  projectTech: {
+    fontSize: 8,
+    fontStyle: 'italic',
+    color: '#000000',
+    marginLeft: 8,
+    marginTop: 1
+  },
 });
 
 // PDF Document component
