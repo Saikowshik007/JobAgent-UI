@@ -17,6 +17,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [statusChanging, setStatusChanging] = useState(false);
   const [lastStatusChange, setLastStatusChange] = useState(null);
+  const [userSettings, setUserSettings] = useState(null); // Add state for user settings
 
   const { currentUser, getUserSettings } = useAuth();
   const currentJobId = useRef(job?.id);
@@ -44,27 +45,57 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
     }
   }, [job?.id, job?.resume_id]);
 
-  // Fetch user's resume data when component mounts
+  // Fetch user's resume data and settings when component mounts
   useEffect(() => {
-    async function fetchUserResume() {
+    async function fetchUserData() {
       if (currentUser) {
         try {
+          // Fetch user settings
+          const settings = await getUserSettings();
+          setUserSettings(settings);
+          console.log('Loaded user settings:', settings);
+
+          // Fetch user resume data
           const resumeRef = doc(db, "resumes", currentUser.uid);
           const resumeSnap = await getDoc(resumeRef);
 
           if (resumeSnap.exists()) {
-            setUserResumeData(resumeSnap.data());
+            const resumeData = resumeSnap.data();
+            setUserResumeData(resumeData);
+            console.log('Loaded user resume data:', resumeData);
           } else {
             console.log("No resume found for user");
           }
         } catch (error) {
-          console.error("Error fetching user resume:", error);
+          console.error("Error fetching user data:", error);
         }
       }
     }
 
-    fetchUserResume();
-  }, [currentUser]);
+    fetchUserData();
+  }, [currentUser, getUserSettings]);
+
+  // Helper function to determine includeObjective flag
+  const getIncludeObjectiveFlag = () => {
+    // Check if user has objective/professional summary in their resume
+    const hasObjectiveInResume = userResumeData?.objective &&
+        userResumeData.objective.trim().length > 0;
+
+    // Priority: 1. User setting, 2. Auto-detect from resume, 3. Default true
+    if (userSettings?.settings?.resume?.include_objective !== undefined) {
+      // User has explicitly set a preference
+      console.log(`Using user setting: include_objective = ${userSettings.settings.resume.include_objective}`);
+      return userSettings.settings.resume.include_objective;
+    } else if (hasObjectiveInResume) {
+      // User has an objective in their resume, so they probably want it
+      console.log(`Auto-detected: User has objective in resume, including it`);
+      return true;
+    } else {
+      // No objective in resume, but still default to true for new users
+      console.log(`Default: No objective in resume, but defaulting to true`);
+      return true;
+    }
+  };
 
   // Updated to match the API's JobStatusEnum values
   const statusOptions = [
@@ -105,28 +136,8 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
         throw new Error("Your resume data is not available. Please update your resume in Settings.");
       }
 
-      const settings = await getUserSettings() || {};
-
-      // Smart objective detection logic:
-      const hasObjectiveInResume = userResumeData.objective &&
-          userResumeData.objective.trim().length > 0;
-
-      // Priority: 1. User setting, 2. Auto-detect from resume, 3. Default true
-      let includeObjective;
-
-      if (settings.settings?.resume?.include_objective !== undefined) {
-        // User has explicitly set a preference
-        includeObjective = settings.settings.resume.include_objective;
-        console.log(`Using user setting: include_objective = ${includeObjective}`);
-      } else if (hasObjectiveInResume) {
-        // User has an objective in their resume, so they probably want it
-        includeObjective = true;
-        console.log(`Auto-detected: User has objective in resume, including it`);
-      } else {
-        // No objective in resume, but still default to true for new users
-        includeObjective = true;
-        console.log(`Default: No objective in resume, but defaulting to true`);
-      }
+      // Get the includeObjective flag using our helper function
+      const includeObjective = getIncludeObjectiveFlag();
 
       const requestData = {
         job_id: job.id,
@@ -139,29 +150,26 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
       console.log("Resume generation request:", {
         jobId: job.id,
         hasResumeData: !!userResumeData,
-        includeObjective
+        includeObjective,
+        hasObjectiveInResume: !!(userResumeData?.objective?.trim()),
+        userSetting: userSettings?.settings?.resume?.include_objective
       });
 
-      // Use the updated API
-      const response = await fetch('/api/resume/generate?handle_existing=replace', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': currentUser?.uid,
-          ...(settings.openaiApiKey && { 'X-Api-Key': settings.openaiApiKey })
-        },
-        body: JSON.stringify(requestData)
-      });
+      // Use resumeApi.generateResume with the enhanced settings
+      const response = await resumeApi.generateResume(
+          job.id,
+          {
+            openaiApiKey: userSettings?.openaiApiKey,
+            resumeData: userResumeData,
+            includeObjective: includeObjective
+          },
+          true, // customize
+          "standard", // template
+          "replace" // handleExisting
+      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to generate resume');
-      }
-
-      const result = await response.json();
-
-      if (result && result.resume_id) {
-        setResumeId(result.resume_id);
+      if (response && response.resume_id) {
+        setResumeId(response.resume_id);
         setShowStatusTracker(true);
         onStatusChange(job.id, 'RESUME_GENERATED');
       } else {
@@ -567,31 +575,18 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
         </div>
 
         {/* Enhanced Error/Success Messages */}
-        {userResumeData && (
-            <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+        {userResumeData && userSettings && (
+            <div className="mx-6 mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <div className="flex items-center space-x-2 text-sm text-blue-800">
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span>
-        Resume will {
-                  (() => {
-                    const settings = formData?.settings; // You'll need to pass this down or get it
-                    const hasObjective = userResumeData.objective?.trim().length > 0;
-
-                    if (settings?.resume?.include_objective !== undefined) {
-                      return settings.resume.include_objective ? 'include' : 'exclude';
-                    } else if (hasObjective) {
-                      return 'include';
-                    } else {
-                      return 'include'; // default
-                    }
-                  })()
-                } an objective section
-      </span>
+                  Resume will {getIncludeObjectiveFlag() ? 'include' : 'exclude'} an objective section
+                </span>
                 <span className="text-blue-600">
-        (Change in Settings)
-      </span>
+                  (Change in Settings)
+                </span>
               </div>
             </div>
         )}
@@ -692,15 +687,15 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
         </div>
 
         <style jsx>{`
-        @keyframes slide-down {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+          @keyframes slide-down {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
 
-        .animate-slide-down {
-          animation: slide-down 0.3s ease-out;
-        }
-      `}</style>
+          .animate-slide-down {
+            animation: slide-down 0.3s ease-out;
+          }
+        `}</style>
       </div>
   );
 }

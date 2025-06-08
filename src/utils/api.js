@@ -262,12 +262,14 @@ export const jobsApi = {
 
 // Resume API - Updated to match your OpenAPI spec
 export const resumeApi = {
-  // Generate resume
+  // Generate resume with enhanced settings support
   generateResume(jobId, settings, customize = true, template = "standard", handleExisting = "replace") {
     const apiKey = settings?.openaiApiKey || "";
     const resumeData = settings?.resumeData || null;
+    const includeObjective = settings?.includeObjective;
 
     console.log(`Generating resume for job ${jobId} with resume data: ${resumeData ? 'Present' : 'Not provided'}`);
+    console.log(`Include objective: ${includeObjective}`);
 
     const requestBody = {
       job_id: jobId,
@@ -278,6 +280,12 @@ export const resumeApi = {
     if (resumeData) {
       requestBody.resume_data = resumeData;
       console.log("Including user's resume data in generation request");
+    }
+
+    // Add includeObjective flag if provided
+    if (includeObjective !== undefined) {
+      requestBody.include_objective = includeObjective;
+      console.log(`Including include_objective flag: ${includeObjective}`);
     }
 
     const params = new URLSearchParams();
@@ -425,16 +433,6 @@ export const resumeApi = {
       checkStatus();
     });
   },
-
-  // Legacy method for compatibility
-  async saveResumeYaml(resumeId, yamlContent) {
-    try {
-      return await this.updateResumeYaml(resumeId, yamlContent);
-    } catch (error) {
-      console.error(`Error saving resume YAML:`, error);
-      throw error;
-    }
-  }
 };
 
 // Simplify API - Updated to match your OpenAPI spec

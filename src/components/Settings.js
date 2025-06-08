@@ -36,6 +36,9 @@ function Settings() {
       cache: {
         job_cache_size: 1000,
         search_cache_size: 100
+      },
+      resume: {
+        include_objective: false // Add this default
       }
     }
   });
@@ -60,6 +63,9 @@ function Settings() {
               cache: {
                 job_cache_size: settings.settings?.cache?.job_cache_size ?? 1000,
                 search_cache_size: settings.settings?.cache?.search_cache_size ?? 100
+              },
+              resume: {
+                include_objective: settings.settings?.resume?.include_objective ?? true // Add this
               }
             }
           });
