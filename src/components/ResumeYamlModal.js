@@ -94,8 +94,8 @@ const styles = StyleSheet.create({
 
 // Text sanitization function to ensure proper encoding
 const sanitizeText = (text) => {
-  if (!text) return '';
-  return text
+  if (!text || typeof text !== 'string') return '';
+  return String(text)
     .replace(/'/g, "'")  // Replace smart quotes
     .replace(/"/g, '"')  // Replace smart quotes
     .replace(/–/g, '-')  // Replace en dash
