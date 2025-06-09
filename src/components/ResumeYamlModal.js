@@ -15,32 +15,14 @@ import {
   SectionHeader
 } from './resume/ResumeFormComponents';
 
-// Using Calibri with proper web font loading
-Font.register({
-  family: 'Calibri',
-  fonts: [
-    {
-      src: 'https://fonts.gstatic.com/s/calibri/v15/J7afnpV-BGlaFfdAhLEY6w.woff2',
-      fontWeight: 'normal',
-    },
-    {
-      src: 'https://fonts.gstatic.com/s/calibri/v15/J7aanpV-BGlaFfdAjAo9_omm.woff2',
-      fontWeight: 'bold',
-    },
-    {
-      src: 'https://fonts.gstatic.com/s/calibri/v15/J7afnpV-BGlaFfdAhLEY6w.woff2',
-      fontStyle: 'italic',
-    },
-  ],
-});
-
+// Using Times New Roman (built-in font) - reliable and professional
 const styles = StyleSheet.create({
   page: {
     paddingTop: 30,
     paddingBottom: 30,
     paddingHorizontal: 40,
     fontSize: 10,
-    fontFamily: 'Calibri',
+    fontFamily: 'Times-Roman',
     lineHeight: 1.3,
   },
   header: { 
@@ -49,13 +31,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold', 
     marginBottom: 2, 
     textTransform: 'uppercase',
-    fontFamily: 'Calibri'
+    fontFamily: 'Times-Roman'
   },
   contact: { 
     textAlign: 'center', 
     fontSize: 9, 
     marginBottom: 5,
-    fontFamily: 'Calibri'
+    fontFamily: 'Times-Roman'
   },
   sectionTitle: {
     fontSize: 10,
@@ -67,28 +49,28 @@ const styles = StyleSheet.create({
     borderBottomColor: '#000000',
     borderBottomStyle: 'solid',
     paddingBottom: 1,
-    fontFamily: 'Calibri'
+    fontFamily: 'Times-Roman'
   },
   jobBlock: { marginBottom: 5 },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   jobTitle: { 
     fontStyle: 'italic',
-    fontFamily: 'Calibri'
+    fontFamily: 'Times-Roman'
   },
   bullet: { 
     marginLeft: 8, 
     marginBottom: 1,
-    fontFamily: 'Calibri'
+    fontFamily: 'Times-Roman'
   },
   textNormal: { 
     marginBottom: 3,
-    fontFamily: 'Calibri'
+    fontFamily: 'Times-Roman'
   },
   projectTitle: { 
     fontWeight: 'bold', 
     color: 'blue', 
     textDecoration: 'none',
-    fontFamily: 'Calibri'
+    fontFamily: 'Times-Roman'
   },
   projectTitleRow: {
     flexDirection: 'row',
@@ -102,11 +84,11 @@ const styles = StyleSheet.create({
     color: '#000000',
     marginLeft: 8,
     marginTop: 1,
-    fontFamily: 'Calibri'
+    fontFamily: 'Times-Roman'
   },
   boldText: {
     fontWeight: 'bold',
-    fontFamily: 'Calibri'
+    fontFamily: 'Times-Roman'
   }
 });
 
@@ -170,7 +152,7 @@ const ResumeDocument = ({ data, userLocation }) => {
                   <Text style={styles.boldText}>
                     {sanitizeText(exp.company) || 'Company Name'}
                   </Text>
-                  <Text style={{ fontFamily: 'Calibri' }}>
+                  <Text style={{ fontFamily: 'Times-Roman' }}>
                     {sanitizeText(exp.titles?.[0]?.startdate)} - {sanitizeText(exp.titles?.[0]?.enddate)}
                   </Text>
                 </View>
@@ -227,7 +209,7 @@ const ResumeDocument = ({ data, userLocation }) => {
                     {sanitizeText(edu.school)}, {sanitizeText(edu.degrees?.[0]?.names?.join(', '))}
                     {edu.degrees?.[0]?.gpa && ` (GPA: ${sanitizeText(edu.degrees[0].gpa)})`}
                   </Text>
-                  <Text style={{ fontFamily: 'Calibri' }}>
+                  <Text style={{ fontFamily: 'Times-Roman' }}>
                     {sanitizeText(edu.degrees?.[0]?.dates)}
                   </Text>
                 </View>
