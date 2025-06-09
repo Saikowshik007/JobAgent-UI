@@ -15,14 +15,32 @@ import {
   SectionHeader
 } from './resume/ResumeFormComponents';
 
-// Using Helvetica (built-in font) for maximum compatibility
+// Using Calibri with proper web font loading
+Font.register({
+  family: 'Calibri',
+  fonts: [
+    {
+      src: 'https://fonts.gstatic.com/s/calibri/v15/J7afnpV-BGlaFfdAhLEY6w.woff2',
+      fontWeight: 'normal',
+    },
+    {
+      src: 'https://fonts.gstatic.com/s/calibri/v15/J7aanpV-BGlaFfdAjAo9_omm.woff2',
+      fontWeight: 'bold',
+    },
+    {
+      src: 'https://fonts.gstatic.com/s/calibri/v15/J7afnpV-BGlaFfdAhLEY6w.woff2',
+      fontStyle: 'italic',
+    },
+  ],
+});
+
 const styles = StyleSheet.create({
   page: {
     paddingTop: 30,
     paddingBottom: 30,
     paddingHorizontal: 40,
     fontSize: 10,
-    fontFamily: 'Helvetica',
+    fontFamily: 'Calibri',
     lineHeight: 1.3,
   },
   header: { 
@@ -31,13 +49,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold', 
     marginBottom: 2, 
     textTransform: 'uppercase',
-    fontFamily: 'Helvetica'
+    fontFamily: 'Calibri'
   },
   contact: { 
     textAlign: 'center', 
     fontSize: 9, 
     marginBottom: 5,
-    fontFamily: 'Helvetica'
+    fontFamily: 'Calibri'
   },
   sectionTitle: {
     fontSize: 10,
@@ -49,28 +67,28 @@ const styles = StyleSheet.create({
     borderBottomColor: '#000000',
     borderBottomStyle: 'solid',
     paddingBottom: 1,
-    fontFamily: 'Helvetica'
+    fontFamily: 'Calibri'
   },
   jobBlock: { marginBottom: 5 },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   jobTitle: { 
     fontStyle: 'italic',
-    fontFamily: 'Helvetica'
+    fontFamily: 'Calibri'
   },
   bullet: { 
     marginLeft: 8, 
     marginBottom: 1,
-    fontFamily: 'Helvetica'
+    fontFamily: 'Calibri'
   },
   textNormal: { 
     marginBottom: 3,
-    fontFamily: 'Helvetica'
+    fontFamily: 'Calibri'
   },
   projectTitle: { 
     fontWeight: 'bold', 
     color: 'blue', 
     textDecoration: 'none',
-    fontFamily: 'Helvetica'
+    fontFamily: 'Calibri'
   },
   projectTitleRow: {
     flexDirection: 'row',
@@ -84,11 +102,11 @@ const styles = StyleSheet.create({
     color: '#000000',
     marginLeft: 8,
     marginTop: 1,
-    fontFamily: 'Helvetica'
+    fontFamily: 'Calibri'
   },
   boldText: {
     fontWeight: 'bold',
-    fontFamily: 'Helvetica'
+    fontFamily: 'Calibri'
   }
 });
 
@@ -142,7 +160,7 @@ const ResumeDocument = ({ data, userLocation }) => {
                   <Text style={styles.boldText}>
                     {sanitizeText(exp.company) || 'Company Name'}
                   </Text>
-                  <Text style={{ fontFamily: 'Helvetica' }}>
+                  <Text style={{ fontFamily: 'Calibri' }}>
                     {sanitizeText(exp.titles?.[0]?.startdate)} - {sanitizeText(exp.titles?.[0]?.enddate)}
                   </Text>
                 </View>
@@ -199,7 +217,7 @@ const ResumeDocument = ({ data, userLocation }) => {
                     {sanitizeText(edu.school)}, {sanitizeText(edu.degrees?.[0]?.names?.join(', '))}
                     {edu.degrees?.[0]?.gpa && ` (GPA: ${sanitizeText(edu.degrees[0].gpa)})`}
                   </Text>
-                  <Text style={{ fontFamily: 'Helvetica' }}>
+                  <Text style={{ fontFamily: 'Calibri' }}>
                     {sanitizeText(edu.degrees?.[0]?.dates)}
                   </Text>
                 </View>
