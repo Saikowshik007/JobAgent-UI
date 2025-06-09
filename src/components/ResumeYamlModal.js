@@ -112,8 +112,18 @@ const styles = StyleSheet.create({
 
 // Text sanitization function to ensure proper encoding
 const sanitizeText = (text) => {
-  if (!text || typeof text !== 'string') return '';
-  return String(text)
+  if (text === null || text === undefined) return '';
+  
+  // Convert to string first, handling numbers properly
+  const stringValue = String(text);
+  
+  // Don't process if it's just a number (like GPA)
+  if (!isNaN(text) && !isNaN(parseFloat(text))) {
+    return stringValue;
+  }
+  
+  // Only apply character replacements to actual text content
+  return stringValue
     .replace(/'/g, "'")  // Replace smart quotes
     .replace(/"/g, '"')  // Replace smart quotes
     .replace(/–/g, '-')  // Replace en dash
