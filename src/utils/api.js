@@ -257,7 +257,25 @@ export const jobsApi = {
     return resumeApi.generateResume(jobId, settings, customize, template);
   },
   getResumeYaml: (resumeId) => resumeApi.getResumeYaml(resumeId),
-  getResumeStatus: (resumeId) => resumeApi.getResumeStatus(resumeId)
+  getResumeStatus: (resumeId) => resumeApi.getResumeStatus(resumeId),
+  analyzeJobDescription(description, status = null, apiKey = null) {
+    const formData = new FormData();
+    formData.append('job_description', description);
+    if (status) {
+      formData.append('status', status);
+    }
+
+    const headers = {};
+    if (apiKey) {
+      headers['X-Api-Key'] = apiKey;
+    }
+
+    return apiRequestWithRetry('/api/jobs/analyze-description', {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+  },
 };
 
 // Resume API - Updated to match your OpenAPI spec

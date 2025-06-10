@@ -1,14 +1,15 @@
-// Enhanced JobSearch.js with proper response handling
 import React, { useState } from "react";
 import {
   Link, Plus, Sparkles, Target, FileText, Send, MessageSquare,
   Trophy, XCircle, MinusCircle, CheckCircle, AlertCircle,
-  Loader2, Zap, Globe, Key, Info
+  Loader2, Zap, Globe, Key, Info, Type, ArrowUpDown
 } from "lucide-react";
 import { jobsApi } from "../utils/api";
 
 function JobSearch({ onSearchComplete, userSettings, userId }) {
+  const [inputMode, setInputMode] = useState("url"); // "url" or "description"
   const [jobUrl, setJobUrl] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState({ status: '', message: '' });
@@ -30,8 +31,19 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
   const handleAnalyze = async (e) => {
     e.preventDefault();
 
-    if (!jobUrl.trim()) {
+    // Validation based on input mode
+    if (inputMode === "url" && !jobUrl.trim()) {
       setError("Please enter a job URL");
+      return;
+    }
+
+    if (inputMode === "description" && !jobDescription.trim()) {
+      setError("Please paste the job description");
+      return;
+    }
+
+    if (inputMode === "description" && jobDescription.trim().length < 50) {
+      setError("Job description is too short. Please provide a complete job description.");
       return;
     }
 
@@ -46,16 +58,29 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
       setLoading(true);
       setError("");
       setShowSuccess(false);
-      setProgress({ status: 'analyzing', message: 'Analyzing job posting...' });
 
-      console.log("🔍 Starting job analysis:", {
-        url: jobUrl,
+      if (inputMode === "url") {
+        setProgress({ status: 'analyzing', message: 'Analyzing job posting from URL...' });
+      } else {
+        setProgress({ status: 'analyzing', message: 'Analyzing job description...' });
+      }
+
+      console.log(`🔍 Starting job analysis (${inputMode}):`, {
+        url: inputMode === "url" ? jobUrl : null,
+        description: inputMode === "description" ? `${jobDescription.substring(0, 100)}...` : null,
         status: selectedStatus,
         hasApiKey: !!apiKey
       });
 
-      // Make actual API call to analyze the job
-      const response = await jobsApi.analyzeJob(jobUrl, selectedStatus, apiKey);
+      // Make API call based on input mode
+      let response;
+      if (inputMode === "url") {
+        response = await jobsApi.analyzeJob(jobUrl, selectedStatus, apiKey);
+      } else {
+        // For description mode, we'll use the existing analyze endpoint
+        // but pass the description in a way the backend can handle
+        response = await jobsApi.analyzeJobDescription(jobDescription, selectedStatus, apiKey);
+      }
 
       console.log("📋 Job analysis response:", response);
 
@@ -65,13 +90,10 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
       if (response.job_details) {
         newJob = response.job_details;
       } else if (response.job) {
-        // Standard response with job wrapper
         newJob = response.job;
       } else if (response.id) {
-        // Direct job object
         newJob = response;
       } else if (Array.isArray(response) && response.length > 0) {
-        // Array of jobs
         newJob = response[0];
       } else {
         console.error("❌ Unexpected response structure:", response);
@@ -92,8 +114,12 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
         company: newJob.company || newJob.metadata?.company || "Unknown Company",
         status: newJob.status || selectedStatus,
         date_found: newJob.date_found || new Date().toISOString(),
-        job_url: newJob.job_url || jobUrl,
-        metadata: newJob.metadata || {}
+        job_url: newJob.job_url || (inputMode === "url" ? jobUrl : null),
+        description: newJob.description || (inputMode === "description" ? jobDescription : null),
+        metadata: {
+          ...newJob.metadata,
+          input_method: inputMode
+        }
       };
 
       console.log("✅ Validated job:", validatedJob);
@@ -101,9 +127,14 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
       // Pass the job to the parent component
       onSearchComplete([validatedJob]);
 
+      // Clear form
       setJobUrl("");
+      setJobDescription("");
       setShowSuccess(true);
-      setProgress({ status: 'success', message: 'Job added successfully!' });
+      setProgress({
+        status: 'success',
+        message: `Job added successfully ${inputMode === "url" ? "from URL" : "from description"}!`
+      });
 
       // Hide success message after 3 seconds
       setTimeout(() => {
@@ -127,7 +158,13 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
       } else if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
         errorMessage = "Authentication failed. Please check your API key.";
       } else if (err.message?.includes('400') || err.message?.includes('Bad Request')) {
-        errorMessage = "Invalid job URL or request. Please check the URL and try again.";
+        errorMessage = inputMode === "url"
+            ? "Invalid job URL or request. Please check the URL and try again."
+            : "Invalid job description. Please check the content and try again.";
+      } else if (err.message?.includes('409')) {
+        errorMessage = inputMode === "url"
+            ? "This job URL has already been added to your list."
+            : "A job with this description has already been added to your list.";
       } else if (err.message?.includes('timeout')) {
         errorMessage = "Request timed out. Please try again.";
       } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
@@ -153,10 +190,40 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
               <Plus className="h-6 w-6 text-white" />
             </div>
             <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              Add Job by URL
+              Add Job
             </h2>
           </div>
-          <p className="text-gray-600">Transform any job posting into an organized application tracker</p>
+          <p className="text-gray-600">Add jobs by URL or paste job descriptions directly</p>
+        </div>
+
+        {/* Input Mode Toggle */}
+        <div className="mb-6">
+          <div className="flex items-center space-x-1 bg-gray-100 rounded-xl p-1">
+            <button
+                type="button"
+                onClick={() => setInputMode("url")}
+                className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
+                    inputMode === "url"
+                        ? "bg-white text-indigo-600 shadow-sm"
+                        : "text-gray-600 hover:text-gray-800"
+                }`}
+            >
+              <Globe className="h-4 w-4" />
+              <span>From URL</span>
+            </button>
+            <button
+                type="button"
+                onClick={() => setInputMode("description")}
+                className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
+                    inputMode === "description"
+                        ? "bg-white text-indigo-600 shadow-sm"
+                        : "text-gray-600 hover:text-gray-800"
+                }`}
+            >
+              <Type className="h-4 w-4" />
+              <span>From Description</span>
+            </button>
+          </div>
         </div>
 
         {/* Animated Error Alert */}
@@ -198,38 +265,86 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
 
         {/* Main Form */}
         <form onSubmit={handleAnalyze} className="space-y-6">
-          {/* URL Input with enhanced styling */}
-          <div className="group">
-            <label htmlFor="job-url" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-              <Link className="h-4 w-4" />
-              <span>Job URL</span>
-            </label>
-            <div className="relative">
-              <input
-                  type="url"
-                  id="job-url"
+          {/* Dynamic Input Field */}
+          {inputMode === "url" ? (
+              <div className="group">
+                <label htmlFor="job-url" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                  <Link className="h-4 w-4" />
+                  <span>Job URL</span>
+                </label>
+                <div className="relative">
+                  <input
+                      type="url"
+                      id="job-url"
+                      className="
+                  block w-full rounded-xl border-gray-300 shadow-sm
+                  focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200
+                  transition-all duration-200 pl-12 py-3
+                  group-hover:shadow-md
+                "
+                      placeholder="https://www.linkedin.com/jobs/view/12345678"
+                      value={jobUrl}
+                      onChange={(e) => setJobUrl(e.target.value)}
+                      disabled={loading}
+                  />
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Globe className="h-5 w-5 text-gray-400 group-hover:text-indigo-500 transition-colors duration-200" />
+                  </div>
+                </div>
+                <p className="mt-2 text-sm text-gray-500 flex items-center space-x-1">
+                  <Info className="h-4 w-4" />
+                  <span>Paste the URL of a job posting from LinkedIn, Indeed, or other job boards</span>
+                </p>
+              </div>
+          ) : (
+              <div className="group">
+                <label htmlFor="job-description" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                  <Type className="h-4 w-4" />
+                  <span>Job Description</span>
+                </label>
+                <div className="relative">
+              <textarea
+                  id="job-description"
+                  rows={8}
                   className="
-                block w-full rounded-xl border-gray-300 shadow-sm
-                focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200
-                transition-all duration-200 pl-12 py-3
-                group-hover:shadow-md
-              "
-                  placeholder="https://www.linkedin.com/jobs/view/12345678"
-                  value={jobUrl}
-                  onChange={(e) => setJobUrl(e.target.value)}
+                  block w-full rounded-xl border-gray-300 shadow-sm
+                  focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200
+                  transition-all duration-200 pl-4 pr-4 py-3
+                  group-hover:shadow-md resize-none
+                "
+                  placeholder="Paste the complete job description here...
+
+Example:
+Software Engineer - Remote
+We are seeking a talented Software Engineer to join our team...
+
+Requirements:
+- 3+ years of experience with JavaScript
+- Experience with React and Node.js
+- Bachelor's degree in Computer Science or related field
+
+Responsibilities:
+- Develop and maintain web applications
+- Collaborate with cross-functional teams
+- Write clean, maintainable code"
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
                   disabled={loading}
               />
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Globe className="h-5 w-5 text-gray-400 group-hover:text-indigo-500 transition-colors duration-200" />
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-sm text-gray-500 flex items-center space-x-1">
+                    <Info className="h-4 w-4" />
+                    <span>Copy and paste the complete job description including title, company, requirements, etc.</span>
+                  </p>
+                  <span className="text-xs text-gray-400">
+                {jobDescription.length} characters
+              </span>
+                </div>
               </div>
-            </div>
-            <p className="mt-2 text-sm text-gray-500 flex items-center space-x-1">
-              <Info className="h-4 w-4" />
-              <span>Paste the URL of a job posting from LinkedIn, Indeed, or other job boards</span>
-            </p>
-          </div>
+          )}
 
-          {/* Status Selection with fancy styling */}
+          {/* Status Selection */}
           <div className="group">
             <label htmlFor="initial-status" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
               <SelectedIcon className={`h-4 w-4 ${selectedStatusOption?.color}`} />
@@ -263,7 +378,7 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
             </p>
           </div>
 
-          {/* Submit Button with loading animation */}
+          {/* Submit Button */}
           <div className="flex flex-wrap gap-4">
             <button
                 type="submit"
@@ -285,7 +400,7 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
                 {loading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>{progress.status === 'analyzing' ? 'Analyzing Job...' : 'Processing...'}</span>
+                      <span>{progress.status === 'analyzing' ? 'Analyzing...' : 'Processing...'}</span>
                     </>
                 ) : (
                     <>
@@ -305,79 +420,147 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
               <div className="p-2 bg-indigo-100 rounded-lg">
                 <Info className="h-4 w-4 text-indigo-600" />
               </div>
-              <h3 className="text-sm font-semibold text-gray-900">Quick Instructions</h3>
+              <h3 className="text-sm font-semibold text-gray-900">
+                {inputMode === "url" ? "URL Instructions" : "Description Instructions"}
+              </h3>
             </div>
 
-            {userSettings?.openaiApiKey ? (
-                <div className="animate-pulse">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 ring-2 ring-green-200">
-                <Key className="h-3 w-3 mr-1" />
-                API Key Ready
-              </span>
-                </div>
-            ) : (
-                <div className="animate-pulse">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 ring-2 ring-yellow-200">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                No API Key
-              </span>
-                </div>
-            )}
-          </div>
+            <div className="flex items-center space-x-3">
+              <button
+                  onClick={() => setInputMode(inputMode === "url" ? "description" : "url")}
+                  className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 hover:bg-indigo-200 transition-colors duration-200"
+              >
+                <ArrowUpDown className="h-3 w-3 mr-1" />
+                Switch Mode
+              </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-indigo-600">1</span>
+              {userSettings?.openaiApiKey ? (
+                  <div className="animate-pulse">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 ring-2 ring-green-200">
+                  <Key className="h-3 w-3 mr-1" />
+                  API Key Ready
+                </span>
                   </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Copy Job URL</p>
-                  <p className="text-xs text-gray-600">From LinkedIn, Indeed, or other job sites</p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-purple-600">2</span>
+              ) : (
+                  <div className="animate-pulse">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 ring-2 ring-yellow-200">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  No API Key
+                </span>
                   </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Choose Status</p>
-                  <p className="text-xs text-gray-600">Select the initial status for the job</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-green-600">3</span>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Paste & Add</p>
-                  <p className="text-xs text-gray-600">Paste the URL and click "Add Job"</p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-blue-600">4</span>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Auto Analysis</p>
-                  <p className="text-xs text-gray-600">System analyzes and adds it to your list</p>
-                </div>
-              </div>
+              )}
             </div>
           </div>
+
+          {inputMode === "url" ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-bold text-indigo-600">1</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Copy Job URL</p>
+                      <p className="text-xs text-gray-600">From LinkedIn, Indeed, or other job sites</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-bold text-purple-600">2</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Choose Status</p>
+                      <p className="text-xs text-gray-600">Select the initial status for the job</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-bold text-green-600">3</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Paste & Add</p>
+                      <p className="text-xs text-gray-600">Paste the URL and click "Add Job"</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-bold text-blue-600">4</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Auto Analysis</p>
+                      <p className="text-xs text-gray-600">System analyzes and adds it to your list</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+          ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-bold text-indigo-600">1</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Copy Full Description</p>
+                      <p className="text-xs text-gray-600">Include title, company, requirements, and responsibilities</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-bold text-purple-600">2</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Paste in Text Area</p>
+                      <p className="text-xs text-gray-600">Use the large text area above</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-bold text-green-600">3</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Choose Status</p>
+                      <p className="text-xs text-gray-600">Select initial status and click "Add Job"</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-bold text-blue-600">4</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">AI Analysis</p>
+                      <p className="text-xs text-gray-600">System extracts key details automatically</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+          )}
 
           {!userSettings?.openaiApiKey && (
               <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -387,6 +570,35 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
                 </div>
               </div>
           )}
+        </div>
+
+        {/* Benefits Section */}
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+            <div className="flex items-center space-x-2 mb-3">
+              <Globe className="h-5 w-5 text-blue-600" />
+              <h4 className="font-semibold text-blue-900">URL Method</h4>
+            </div>
+            <ul className="text-sm text-blue-700 space-y-1">
+              <li>• Automatic data extraction</li>
+              <li>• Gets all job details</li>
+              <li>• Works with most job sites</li>
+              <li>• Preserves original formatting</li>
+            </ul>
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
+            <div className="flex items-center space-x-2 mb-3">
+              <Type className="h-5 w-5 text-purple-600" />
+              <h4 className="font-semibold text-purple-900">Description Method</h4>
+            </div>
+            <ul className="text-sm text-purple-700 space-y-1">
+              <li>• Works when URLs fail</li>
+              <li>• Copy from any source</li>
+              <li>• No access restrictions</li>
+              <li>• Perfect for PDFs/emails</li>
+            </ul>
+          </div>
         </div>
 
         {/* Loading Progress Bar */}
