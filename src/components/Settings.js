@@ -28,9 +28,7 @@ function Settings() {
 
   // Available ChatGPT models
   const availableModels = [
-   { value: "gpt-5", label: "GPT-5 (Latest, Multimodal)", description: "Flagship model for coding, reasoning, and agentic tasks across domains" },
-    { value: "gpt-5-mini", label: "GPT-5 Mini (Latest, Multimodal)", description: "A faster, more cost-efficient version of GPT-5 for well-defined tasks" },
-    { value: "gpt-4o", label: "GPT-4o (Multimodal)", description: "Most capable model with vision capabilities" },
+    { value: "gpt-4o", label: "GPT-4o (Latest, Multimodal)", description: "Most capable model with vision capabilities" },
     { value: "gpt-4o-mini", label: "GPT-4o Mini", description: "Faster and more cost-effective version of GPT-4o" },
     { value: "gpt-4-turbo", label: "GPT-4 Turbo", description: "Previous generation flagship model" },
     { value: "gpt-4", label: "GPT-4", description: "Original GPT-4 model" },
@@ -107,7 +105,13 @@ function Settings() {
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
 
-    if (name === "headless") {
+    if (name === "model") {
+      // Handle model at root level, not nested
+      setFormData(prev => ({
+        ...prev,
+        model: value  // Root level model
+      }));
+    } else if (name === "headless") {
       setFormData(prev => ({
         ...prev,
         settings: {
@@ -129,7 +133,14 @@ function Settings() {
           }
         }
       }));
+    } else if (name === "openaiApiKey") {
+      // Handle API key at root level
+      setFormData(prev => ({
+        ...prev,
+        openaiApiKey: value  // Root level API key
+      }));
     } else {
+      // Handle other root-level fields
       setFormData(prev => ({
         ...prev,
         [name]: value
@@ -199,19 +210,29 @@ function Settings() {
       setSuccess("");
       setLoading(true);
 
-      // Update user settings including the model preference and features
-      await updateUserSettings({
-        openaiApiKey: formData.openaiApiKey,
-        model: formData.model, // Include model in settings
-        settings: formData.settings,
-        // Ensure features are maintained
+      console.log('Saving settings to Firebase:', {
+        openaiApiKey: formData.openaiApiKey ? `${formData.openaiApiKey.substring(0, 10)}...` : 'NOT SET',
+        model: formData.model,
+        settings: formData.settings
+      }); // Debug log
+
+      // Explicitly structure the update to ensure model is at root level
+      const updateData = {
+        openaiApiKey: formData.openaiApiKey,  // Root level
+        model: formData.model,                // Root level (NOT in features or settings)
+        settings: formData.settings,          // Nested settings
         features: {
           advanced_parsing: true,
           batch_operations: true,
           simplify_integration: true,
           custom_templates: true
+          // NO model field here - it should be at root level
         }
-      });
+      };
+
+      console.log('Update data structure:', updateData); // Debug log
+
+      await updateUserSettings(updateData);
 
       // Update resume data
       if (currentUser) {
@@ -223,8 +244,22 @@ function Settings() {
       }
 
       setSuccess("Settings and resume updated successfully!");
+
+      // Debug: Load settings back to verify they were saved correctly
+      setTimeout(async () => {
+        const savedSettings = await getUserSettings();
+        console.log('Settings after save (verification):', {
+          openaiApiKey: savedSettings?.openaiApiKey ? `${savedSettings.openaiApiKey.substring(0, 10)}...` : 'NOT SET',
+          model: savedSettings?.model,
+          rootLevelModel: savedSettings?.model,           // Should have value
+          featuresModel: savedSettings?.features?.model,  // Should be undefined
+          settingsModel: savedSettings?.settings?.model   // Should be undefined
+        });
+      }, 1000);
+
     } catch (err) {
       setError("Failed to update settings: " + err.message);
+      console.error('Settings save error:', err);
     } finally {
       setLoading(false);
     }

@@ -65,22 +65,21 @@ function JobSearch({ onSearchComplete, userSettings, userId }) {
         setProgress({ status: 'analyzing', message: 'Analyzing job description...' });
       }
 
-      console.log(`🔍 Starting job analysis (${inputMode}):`, {
-        url: inputMode === "url" ? jobUrl : null,
-        description: inputMode === "description" ? `${jobDescription.substring(0, 100)}...` : null,
-        status: selectedStatus,
-        hasApiKey: !!apiKey
-      });
+    console.log(`🔍 Starting job analysis (${inputMode}):`, {
+      url: inputMode === "url" ? jobUrl : null,
+      description: inputMode === "description" ? `${jobDescription.substring(0, 100)}...` : null,
+      status: selectedStatus,
+      hasApiKey: !!userSettings?.openaiApiKey,
+      model: userSettings?.model || "gpt-4o"
+    });
 
-      // Make API call based on input mode
-      let response;
-      if (inputMode === "url") {
-        response = await jobsApi.analyzeJob(jobUrl, selectedStatus, apiKey);
-      } else {
-        // For description mode, we'll use the existing analyze endpoint
-        // but pass the description in a way the backend can handle
-        response = await jobsApi.analyzeJobDescription(jobDescription, selectedStatus, apiKey);
-      }
+    // Make API call based on input mode
+    let response;
+    if (inputMode === "url") {
+      response = await jobsApi.analyzeJob(jobUrl, selectedStatus, userSettings);
+    } else {
+      response = await jobsApi.analyzeJobDescription(jobDescription, selectedStatus, userSettings);
+    }
 
       console.log("📋 Job analysis response:", response);
 
