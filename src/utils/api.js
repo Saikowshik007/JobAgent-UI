@@ -143,22 +143,22 @@ async function apiRequestWithRetry(endpoint, options = {}, maxRetries = 3) {
   throw lastError;
 }
 
-// System API
+// System API - Updated to match Python API contract with user_id in path
 export const systemApi = {
-  getStatus() {
-    return apiRequest('/api/status');
+  getStatus(userId) {
+    return apiRequest(`/api/system/${userId}/status`);
   },
 
-  clearCache() {
-    return apiRequest('/api/cache/clear', { method: 'DELETE' });
+  clearCache(userId) {
+    return apiRequest(`/api/system/${userId}/cache/clear`, { method: 'DELETE' });
   },
 
-  cleanupCache() {
-    return apiRequest('/api/cache/cleanup', { method: 'POST' });
+  cleanupCache(userId) {
+    return apiRequest(`/api/system/${userId}/cache/cleanup`, { method: 'POST' });
   },
 
-  getCacheStats() {
-    return apiRequest('/api/cache/stats');
+  getCacheStats(userId) {
+    return apiRequest(`/api/system/${userId}/cache/stats`);
   }
 };
 
@@ -281,8 +281,8 @@ export const jobsApi = {
     return this.analyzeJob(jobUrl, null, userSettings);
   },
 
-  // Legacy methods for compatibility
-  getSystemStatus: () => systemApi.getStatus(),
+  // Legacy methods for compatibility - Updated to include userId
+  getSystemStatus: (userId) => systemApi.getStatus(userId),
   generateResume: (jobId, settings, customize = true, template = "standard") => {
     return resumeApi.generateResume(jobId, settings, customize, template);
   },
@@ -507,16 +507,20 @@ export const simplifyApi = {
   }
 };
 
-// Enhanced health check function
-export const healthCheck = async () => {
+// Enhanced health check function - Updated for user-specific status
+export const healthCheck = async (userId = null) => {
   try {
     console.log('Performing health check...');
 
-    const response = await fetch(`${API_BASE_URL}/api/status`, {
+    // If userId is provided, use the user-specific endpoint
+    const endpoint = userId ? `/api/system/${userId}/status` : '/api/status';
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'GET',
       mode: 'cors',
       headers: {
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        ...(userId && auth.currentUser && { 'X-User-Id': auth.currentUser.uid })
       }
     });
 
