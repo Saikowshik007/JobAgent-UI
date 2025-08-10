@@ -613,25 +613,6 @@ export const healthCheck = async () => {
   }
 };
 
-    const isHealthy = response.ok;
-    console.log(`Health check result: ${isHealthy ? 'HEALTHY' : 'UNHEALTHY'} (${response.status})`);
-
-    if (isHealthy) {
-      try {
-        const data = await response.json();
-        console.log('API Status:', data.status);
-      } catch (e) {
-        console.warn('Could not parse health check response as JSON');
-      }
-    }
-
-    return isHealthy;
-  } catch (error) {
-    console.warn('Health check failed:', error.message);
-    return false;
-  }
-};
-
 // CORS testing utility
 export const testCORS = async () => {
   try {
