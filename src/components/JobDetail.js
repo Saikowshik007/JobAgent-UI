@@ -17,7 +17,6 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [statusChanging, setStatusChanging] = useState(false);
   const [lastStatusChange, setLastStatusChange] = useState(null);
-  const [userPayload, setUserPayload] = useState(null);
   const [userSettings, setUserSettings] = useState(null); // Add state for user settings
 
   const { currentUser, getUserSettings } = useAuth();
@@ -54,26 +53,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
           // Fetch user settings
           const settings = await getUserSettings();
           setUserSettings(settings);
-
-          // Build the user payload for API calls (model from settings)
-          const payload = {
-            id: currentUser.uid,
-            api_key: settings?.openaiApiKey || '',
-            model: settings?.settings?.model || 'gpt-4o',
-            preferences: settings?.preferences || {},
-            features: settings?.features || {
-              advanced_parsing: true,
-              batch_operations: true,
-              simplify_integration: true,
-              custom_templates: true,
-            },
-            metadata: {
-              email: currentUser.email || undefined,
-              displayName: currentUser.displayName || undefined,
-              ...(settings?.metadata || {}),
-            },
-          };
-          setUserPayload(payload);
+          console.log('Loaded user settings:', settings);
 
           // Fetch user resume data
           const resumeRef = doc(db, "resumes", currentUser.uid);
@@ -82,8 +62,9 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
           if (resumeSnap.exists()) {
             const resumeData = resumeSnap.data();
             setUserResumeData(resumeData);
+            console.log('Loaded user resume data:', resumeData);
           } else {
-            // Optional: keep as null if no resume
+            console.log("No resume found for user");
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
@@ -144,7 +125,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
 
   const currentStatusColors = getStatusColors(job.status);
 
- const handleGenerateResume = async () => {
+  const handleGenerateResume = async () => {
     try {
       setGeneratingResume(true);
       setResumeError('');
@@ -154,23 +135,37 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
       if (!userResumeData) {
         throw new Error("Your resume data is not available. Please update your resume in Settings.");
       }
-      if (!userPayload) {
-        throw new Error("User settings not loaded yet. Please try again in a moment.");
-      }
 
+      // Get the includeObjective flag using our helper function
       const includeObjective = getIncludeObjectiveFlag();
 
-      // Call the API with the user object (no legacy headers)
+      const requestData = {
+        job_id: job.id,
+        customize: true,
+        template: "standard",
+        resume_data: userResumeData,
+        include_objective: includeObjective
+      };
+
+      console.log("Resume generation request:", {
+        jobId: job.id,
+        hasResumeData: !!userResumeData,
+        includeObjective,
+        hasObjectiveInResume: !!(userResumeData?.objective?.trim()),
+        userSetting: userSettings?.settings?.resume?.include_objective
+      });
+
+      // Use resumeApi.generateResume with the enhanced settings
       const response = await resumeApi.generateResume(
-        job.id,
-        {
-          resumeData: userResumeData,
-          includeObjective,
-          customize: true,
-          template: "standard",
-          handleExisting: "replace",
-        },
-        userPayload // <— SEND USER HERE
+          job.id,
+          {
+            openaiApiKey: userSettings?.openaiApiKey,
+            resumeData: userResumeData,
+            includeObjective: includeObjective
+          },
+          true, // customize
+          "standard", // template
+          "replace" // handleExisting
       );
 
       if (response && response.resume_id) {
