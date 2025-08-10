@@ -218,17 +218,20 @@ function Settings() {
         settings: formData.settings
       }); // Debug log
 
-      // Explicitly structure the update to ensure model is at root level
+      // Explicitly structure the update to ensure model is in both locations
       const updateData = {
         openaiApiKey: formData.openaiApiKey,  // Root level
-        model: formData.model,                // Root level (NOT in features or settings)
-        settings: formData.settings,          // Nested settings
+        model: formData.model,                // Root level (for AuthContext)
+        settings: {
+          ...formData.settings,
+          model: formData.model               // Also in settings (for your app logic)
+        },
         features: {
           advanced_parsing: true,
           batch_operations: true,
           simplify_integration: true,
           custom_templates: true
-          // NO model field here - it should be at root level
+          // NO model field here
         }
       };;
 
