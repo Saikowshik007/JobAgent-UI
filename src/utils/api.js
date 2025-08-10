@@ -1,586 +1,486 @@
-import { auth } from '../firebase/firebase';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { jobsApi, resumeApi } from '../services/api';
 
-// API Base URL - configured for DuckDNS with fallback
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL ||
-  (process.env.NODE_ENV === 'production'
-    ? 'https://jobtrackai.duckdns.org'
-    : 'http://localhost:8000'
-  );
+function JobsComponent() {
+  const { currentUser, getUserSettingsForApi } = useAuth();
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [userSettings, setUserSettings] = useState(null);
+  const [jobUrl, setJobUrl] = useState('');
+  const [jobDescription, setJobDescription] = useState('');
 
-// Helper to log headers for debugging
-function logHeaders(headers) {
-  if (process.env.NODE_ENV === 'development') {
-    console.log("API Request Headers:");
-    for (const [key, value] of Object.entries(headers)) {
-      console.log(`  ${key}: ${value}`);
-    }
-  }
-}
-
-// Enhanced error handling
-function handleApiError(error, endpoint) {
-  console.error(`API request to ${endpoint} failed:`, error);
-
-  if (error.name === 'TypeError' && error.message.includes('fetch')) {
-    throw new Error('Unable to connect to API server. Please check your connection and try again.');
-  }
-
-  if (error.message.includes('CORS') || error.message.includes('Cross-Origin')) {
-    throw new Error('CORS error: Unable to access API. Please check server configuration.');
-  }
-
-  if (error.message.includes('status 5')) {
-    throw new Error('Server error: Please try again later or contact support.');
-  }
-
-  if (error.message.includes('status 4')) {
-    throw error;
-  }
-
-  throw error;
-}
-
-// Generic API request function
-async function apiRequest(endpoint, options = {}) {
-  const user = auth.currentUser;
-
-  console.log(`Making request to ${endpoint}`);
-  console.log('Current user:', user ? `${user.uid} (authenticated)` : 'No user (unauthenticated)');
-
-  if (!user) {
-    console.warn("No authenticated user! Request will use default user_id on server.");
-  }
-
-  const headers = {
-    ...(options.headers || {})
-  };
-
-  // Add user ID if authenticated
-  if (user) {
-    headers['X-User-Id'] = user.uid;
-  }
-
-  // Don't set Content-Type for FormData requests
-  if (!(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  headers['Accept'] = 'application/json';
-
-  logHeaders(headers);
-
-  const config = {
-    method: 'GET',
-    ...options,
-    headers,
-    mode: 'cors',
-    credentials: user ? 'include' : 'omit',
-    ...(process.env.NODE_ENV === 'development' && {
-      cache: 'no-cache'
-    })
-  };
-
-  try {
-    const fullUrl = `${API_BASE_URL}${endpoint}`;
-    console.log(`Sending ${config.method} request to ${fullUrl}`);
-
-    const response = await fetch(fullUrl, config);
-    console.log(`Response status: ${response.status} ${response.statusText}`);
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log("Response Headers:");
-      for (const [key, value] of response.headers.entries()) {
-        console.log(`  ${key}: ${value}`);
-      }
-    }
-
-    if (!response.ok) {
-      let errorData;
+  // Load user settings on component mount
+  useEffect(() => {
+    async function loadUserSettings() {
       try {
-        errorData = await response.json();
-      } catch (jsonError) {
-        console.warn('Failed to parse error response as JSON:', jsonError);
-        errorData = { detail: `HTTP ${response.status}: ${response.statusText}` };
+        const settings = await getUserSettingsForApi();
+        setUserSettings(settings);
+      } catch (err) {
+        console.error('Failed to load user settings:', err);
       }
-
-      throw new Error(
-        errorData?.detail ||
-        errorData?.message ||
-        `API request failed with status ${response.status}: ${response.statusText}`
-      );
     }
 
-    return await response.json();
-  } catch (error) {
-    handleApiError(error, endpoint);
-  }
-}
+    if (currentUser) {
+      loadUserSettings();
+    }
+  }, [currentUser, getUserSettingsForApi]);
 
-// Enhanced retry logic
-async function apiRequestWithRetry(endpoint, options = {}, maxRetries = 3) {
-  let lastError;
+  // Load jobs using the new API contract (user_id is handled automatically)
+  useEffect(() => {
+    async function loadJobs() {
+      if (!currentUser) return;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        setLoading(true);
+        // No need to pass user_id - it's handled automatically by the API client
+        const response = await jobsApi.getJobs({
+          limit: 50,
+          offset: 0
+        });
+        setJobs(response.jobs || []);
+      } catch (err) {
+        setError('Failed to load jobs: ' + err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadJobs();
+  }, [currentUser]);
+
+  // Add job by URL using new API structure
+  const handleAddJobByUrl = async (jobUrl) => {
+    if (!userSettings) {
+      setError('User settings not loaded');
+      return;
+    }
+
     try {
-      return await apiRequest(endpoint, options);
-    } catch (error) {
-      lastError = error;
+      setLoading(true);
+      setError('');
 
-      if (error.message.includes('status 4') ||
-          error.message.includes('CORS') ||
-          error.message.includes('Cross-Origin')) {
-        throw error;
-      }
+      // User ID is handled automatically by the API client
+      const response = await jobsApi.analyzeJob(jobUrl, 'new', userSettings);
 
-      if (attempt < maxRetries) {
-        const delay = 1000 * Math.pow(2, attempt - 1);
-        console.log(`Request failed, retrying in ${delay}ms (${attempt}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
+      // Refresh jobs list
+      const updatedJobs = await jobsApi.getJobs();
+      setJobs(updatedJobs.jobs || []);
+
+      setJobUrl('');
+      console.log('Job added successfully:', response);
+    } catch (err) {
+      setError('Failed to add job: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
-  throw lastError;
-}
-
-// System API - Updated to match Python API contract with user_id in path
-export const systemApi = {
-  getStatus(userId) {
-    return apiRequest(`/api/system/${userId}/status`);
-  },
-
-  clearCache(userId) {
-    return apiRequest(`/api/system/${userId}/cache/clear`, { method: 'DELETE' });
-  },
-
-  cleanupCache(userId) {
-    return apiRequest(`/api/system/${userId}/cache/cleanup`, { method: 'POST' });
-  },
-
-  getCacheStats(userId) {
-    return apiRequest(`/api/system/${userId}/cache/stats`);
-  }
-};
-
-// Jobs API - Updated to match Python API contract
-export const jobsApi = {
-  // Get all jobs with filtering - Updated to include user_id in path
-  getJobs(userId, params = {}) {
-    const queryParams = new URLSearchParams();
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        queryParams.append(key, value);
-      }
-    });
-
-    const queryString = queryParams.toString();
-    return apiRequest(`/api/jobs/${userId}${queryString ? '?' + queryString : ''}`);
-  },
-
-  // Get specific job - Updated to include user_id in path
-  getJob(userId, jobId) {
-    return apiRequest(`/api/jobs/${userId}/${jobId}`);
-  },
-
-  // Analyze job from URL
-  analyzeJob(jobUrl, status = null, userSettings = {}) {
-    const formData = new FormData();
-    formData.append('job_url', jobUrl);
-    if (status) {
-      formData.append('status', status);
+  // Add job by description using new API endpoint
+  const handleAddJobByDescription = async (description) => {
+    if (!userSettings) {
+      setError('User settings not loaded');
+      return;
     }
 
-    const headers = {};
-    // Add API key if provided in user settings
-    if (userSettings.openaiApiKey) {
-      headers['X-Api-Key'] = userSettings.openaiApiKey;
-    }
-    // Add model if provided in user settings
-    if (userSettings.model) {
-      headers['X-Model'] = userSettings.model;
-    }
-
-    return apiRequestWithRetry('/api/jobs/analyze', {
-      method: 'POST',
-      headers,
-      body: formData
-    });
-  },
-
-  // Analyze job from description text - New endpoint
-  analyzeJobDescription(jobDescription, status = null, userSettings = {}) {
-    const formData = new FormData();
-    formData.append('job_description', jobDescription);
-    if (status) {
-      formData.append('status', status);
-    }
-
-    const headers = {};
-    // Add API key if provided in user settings
-    if (userSettings.openaiApiKey) {
-      headers['X-Api-Key'] = userSettings.openaiApiKey;
-    }
-    // Add model if provided in user settings
-    if (userSettings.model) {
-      headers['X-Model'] = userSettings.model;
-    }
-
-    return apiRequestWithRetry('/api/jobs/analyze-description', {
-      method: 'POST',
-      headers,
-      body: formData
-    });
-  },
-
-  // Update job status - Updated to include user_id in path
-  updateJobStatus(userId, jobId, status) {
-    return apiRequest(`/api/jobs/${userId}/${jobId}/status`, {
-      method: 'PUT',
-      body: JSON.stringify({ status })
-    });
-  },
-
-  // Delete job - Updated to include user_id in path
-  deleteJob(userId, jobId, cascadeResumes = false) {
-    const params = new URLSearchParams();
-    if (cascadeResumes) {
-      params.append('cascade_resumes', 'true');
-    }
-
-    return apiRequest(`/api/jobs/${userId}/${jobId}${params.toString() ? '?' + params.toString() : ''}`, {
-      method: 'DELETE'
-    });
-  },
-
-  // Delete multiple jobs - Updated to include user_id in path
-  deleteJobsBatch(userId, jobIds, cascadeResumes = false) {
-    const params = new URLSearchParams();
-    if (cascadeResumes) {
-      params.append('cascade_resumes', 'true');
-    }
-
-    return apiRequest(`/api/jobs/${userId}/batch${params.toString() ? '?' + params.toString() : ''}`, {
-      method: 'DELETE',
-      body: JSON.stringify(jobIds)
-    });
-  },
-
-  // Get job statistics - Updated to include user_id in path
-  getJobStats(userId) {
-    return apiRequest(`/api/jobs/${userId}/status`);
-  },
-
-  // Get resumes for a specific job - Updated to include user_id in path
-  getJobResumes(userId, jobId) {
-    return apiRequest(`/api/jobs/${userId}/${jobId}/resumes`);
-  },
-
-  // Legacy method for compatibility
-  addJobByUrl(jobUrl, userSettings) {
-    return this.analyzeJob(jobUrl, null, userSettings);
-  },
-
-  // Legacy methods for compatibility - Updated to include userId
-  getSystemStatus: (userId) => systemApi.getStatus(userId),
-  generateResume: (jobId, settings, customize = true, template = "standard") => {
-    return resumeApi.generateResume(jobId, settings, customize, template);
-  },
-  getResumeYaml: (userId, resumeId) => resumeApi.getResumeYaml(userId, resumeId),
-  getResumeStatus: (userId, resumeId) => resumeApi.getResumeStatus(userId, resumeId)
-};
-
-// Resume API - Updated to match Python API contract
-export const resumeApi = {
-  // Generate resume with enhanced settings support
-  generateResume(jobId, userSettings, customize = true, template = "standard", handleExisting = "replace") {
-    console.log(`Generating resume for job ${jobId} with user settings`);
-
-    const requestBody = {
-      job_id: jobId,
-      customize: customize,
-      template: template,
-      user: {
-        id: userSettings.userId || auth.currentUser?.uid,
-        api_key: userSettings.openaiApiKey || "",
-        model: userSettings.model || "gpt-4o"
-      }
-    };
-
-    // Add resume data if provided
-    if (userSettings.resumeData) {
-      requestBody.resume_data = userSettings.resumeData;
-      console.log("Including user's resume data in generation request");
-    }
-
-    // Add includeObjective flag if provided
-    if (userSettings.includeObjective !== undefined) {
-      requestBody.include_objective = userSettings.includeObjective;
-      console.log(`Including include_objective flag: ${userSettings.includeObjective}`);
-    }
-
-    const params = new URLSearchParams();
-    params.append('handle_existing', handleExisting);
-
-    return apiRequestWithRetry(`/api/resume/generate?${params.toString()}`, {
-      method: 'POST',
-      body: JSON.stringify(requestBody)
-    });
-  },
-
-  // Get resume status - Updated to include user_id in path
-  getResumeStatus(userId, resumeId) {
-    return apiRequest(`/api/resume/${userId}/${resumeId}/status`);
-  },
-
-  // Download resume - Updated to include user_id in path
-  downloadResume(userId, resumeId, format = 'yaml') {
-    const params = new URLSearchParams();
-    params.append('format', format);
-
-    return apiRequest(`/api/resume/${userId}/${resumeId}/download?${params.toString()}`);
-  },
-
-  // Get resume YAML content - Updated to include user_id in path
-  async getResumeYaml(userId, resumeId) {
     try {
-      const response = await this.downloadResume(userId, resumeId, 'yaml');
-      return response.content;
-    } catch (error) {
-      console.error('Error downloading resume YAML:', error);
-      throw error;
+      setLoading(true);
+      setError('');
+
+      // User ID is handled automatically by the API client
+      const response = await jobsApi.analyzeJobDescription(description, 'new', userSettings);
+
+      // Refresh jobs list
+      const updatedJobs = await jobsApi.getJobs();
+      setJobs(updatedJobs.jobs || []);
+
+      setJobDescription('');
+      console.log('Job added from description successfully:', response);
+    } catch (err) {
+      setError('Failed to add job from description: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-  },
+  };
 
-  // Upload custom resume - Updated to include user_id in path
-  uploadResume(userId, file, jobId = null) {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (jobId) {
-      formData.append('job_id', jobId);
+  // Update job status using new API structure
+  const handleUpdateJobStatus = async (jobId, newStatus) => {
+    try {
+      // User ID is handled automatically by the API client
+      await jobsApi.updateJobStatus(jobId, newStatus);
+
+      // Update local state
+      setJobs(jobs.map(job =>
+        job.id === jobId ? { ...job, status: newStatus } : job
+      ));
+    } catch (err) {
+      setError('Failed to update job status: ' + err.message);
+    }
+  };
+
+  // Delete job using new API structure
+  const handleDeleteJob = async (jobId, cascadeResumes = false) => {
+    try {
+      // User ID is handled automatically by the API client
+      await jobsApi.deleteJob(jobId, cascadeResumes);
+
+      // Remove from local state
+      setJobs(jobs.filter(job => job.id !== jobId));
+    } catch (err) {
+      setError('Failed to delete job: ' + err.message);
+    }
+  };
+
+  // Generate resume using new API structure
+  const handleGenerateResume = async (jobId) => {
+    if (!userSettings) {
+      setError('User settings not loaded');
+      return;
     }
 
-    return apiRequest(`/api/resume/${userId}/upload`, {
-      method: 'POST',
-      body: formData
-    });
-  },
+    try {
+      setLoading(true);
+      setError('');
 
-  // Update resume YAML - Updated to include user_id in path
-  updateResumeYaml(userId, resumeId, yamlContent) {
-    const formData = new FormData();
-    formData.append('yaml_content', yamlContent);
-
-    return apiRequest(`/api/resume/${userId}/${resumeId}/update-yaml`, {
-      method: 'POST',
-      body: formData
-    });
-  },
-
-  // Delete resume - Updated to include user_id in path
-  deleteResume(userId, resumeId, updateJob = true) {
-    const params = new URLSearchParams();
-    params.append('update_job', updateJob.toString());
-
-    return apiRequest(`/api/resume/${userId}/${resumeId}?${params.toString()}`, {
-      method: 'DELETE'
-    });
-  },
-
-  // Get user resumes - Updated to include user_id in path
-  getUserResumes(userId, params = {}) {
-    const queryParams = new URLSearchParams();
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        queryParams.append(key, value);
-      }
-    });
-
-    const queryString = queryParams.toString();
-    return apiRequest(`/api/resume/${userId}/${queryString ? '?' + queryString : ''}`);
-  },
-
-  // Get active resume generations - Updated to include user_id in path
-  getActiveResumeGenerations(userId) {
-    return apiRequest(`/api/resume/${userId}/active`);
-  },
-
-  // Polling for resume status - Updated to include user_id
-  async pollResumeStatus(userId, resumeId, maxAttempts = 20, interval = 3000) {
-    let attempts = 0;
-    let lastStatus = null;
-
-    return new Promise((resolve, reject) => {
-      const checkStatus = async () => {
-        try {
-          if (attempts >= maxAttempts) {
-            reject(new Error('Resume generation polling timed out after 60 seconds'));
-            return;
-          }
-
-          const statusData = await this.getResumeStatus(userId, resumeId);
-          attempts++;
-
-          if (!lastStatus || lastStatus !== statusData.status) {
-            console.log(`Resume status (attempt ${attempts}/${maxAttempts}): ${statusData.status}`);
-            lastStatus = statusData.status;
-          }
-
-          if (statusData.status === 'completed') {
-            resolve(statusData);
-            return;
-          }
-
-          if (statusData.status === 'error' || statusData.status === 'failed') {
-            reject(new Error(statusData.message || statusData.error || 'Resume generation failed'));
-            return;
-          }
-
-          if (statusData.status === 'processing' || statusData.status === 'queued' || statusData.status === 'pending') {
-            setTimeout(checkStatus, interval);
-          } else {
-            console.warn(`Unknown resume status: ${statusData.status}, continuing to poll...`);
-            setTimeout(checkStatus, interval);
-          }
-        } catch (error) {
-          console.error(`Error checking resume status (attempt ${attempts}):`, error);
-
-          if (attempts >= 5) {
-            reject(error);
-            return;
-          }
-
-          setTimeout(checkStatus, interval * 2);
-        }
+      // Get user's resume data from Firebase/settings
+      const settingsWithResumeData = {
+        ...userSettings,
+        resumeData: null, // This would be loaded from your resume store
+        includeObjective: userSettings.includeObjective
       };
 
-      checkStatus();
-    });
-  },
-};
+      // Generate resume using new API structure (user ID handled automatically)
+      const response = await resumeApi.generateResume(
+        jobId,
+        settingsWithResumeData,
+        true, // customize
+        'standard', // template
+        'replace' // handle_existing
+      );
 
-// Simplify API - Updated to match Python API contract with user_id in path
-export const simplifyApi = {
-  // Store authentication tokens - Updated to include user_id in path
-  storeTokens(userId, tokens) {
-    console.log(`🔑 Storing authentication tokens for user ${userId}...`);
-    return apiRequest(`/api/simplify/${userId}/store-tokens`, {
-      method: 'POST',
-      body: JSON.stringify(tokens)
-    });
-  },
+      console.log('Resume generation started:', response);
 
-  // Check session validity - Updated to include user_id in path
-  checkSession(userId) {
-    return apiRequest(`/api/simplify/${userId}/check-session`);
-  },
+      // Poll for completion if needed (user ID handled automatically)
+      if (response.resume_id) {
+        const finalStatus = await resumeApi.pollResumeStatus(response.resume_id);
+        console.log('Resume generation completed:', finalStatus);
+      }
 
-  // Get stored tokens - Updated to include user_id in path
-  getStoredTokens(userId) {
-    return apiRequest(`/api/simplify/${userId}/get-tokens`);
-  },
-
-  // Upload PDF resume to Simplify - Updated to include user_id in path
-  uploadResumeToSimplify(userId, pdfBlob, resumeId, jobId = null) {
-    console.log('📤 Uploading resume to Simplify via backend proxy...');
-
-    const formData = new FormData();
-    const fileName = `resume_${resumeId}.pdf`;
-    formData.append('resume_pdf', pdfBlob, fileName);
-    formData.append('resume_id', resumeId);
-
-    if (jobId) {
-      formData.append('job_id', jobId);
+    } catch (err) {
+      setError('Failed to generate resume: ' + err.message);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    return apiRequest(`/api/simplify/${userId}/upload-resume-pdf`, {
-      method: 'POST',
-      body: formData
-    });
-  },
-
-  // Get current user ID for token management
-  getCurrentUserId() {
-    const user = auth.currentUser;
-    return user?.uid || 'default_user';
-  }
-};
-
-// Enhanced health check function - Updated for user-specific status
-export const healthCheck = async (userId = null) => {
-  try {
-    console.log('Performing health check...');
-
-    // If userId is provided, use the user-specific endpoint
-    const endpoint = userId ? `/api/system/${userId}/status` : '/api/status';
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'GET',
-      mode: 'cors',
-      headers: {
-        'Accept': 'application/json',
-        ...(userId && auth.currentUser && { 'X-User-Id': auth.currentUser.uid })
-      }
-    });
-
-    const isHealthy = response.ok;
-    console.log(`Health check result: ${isHealthy ? 'HEALTHY' : 'UNHEALTHY'} (${response.status})`);
-
-    if (isHealthy) {
-      try {
-        const data = await response.json();
-        console.log('API Status:', data.status);
-      } catch (e) {
-        console.warn('Could not parse health check response as JSON');
-      }
+  // Get job resumes using new API structure
+  const handleGetJobResumes = async (jobId) => {
+    try {
+      // User ID is handled automatically by the API client
+      const response = await jobsApi.getJobResumes(jobId);
+      console.log('Job resumes:', response.resumes);
+      return response.resumes;
+    } catch (err) {
+      setError('Failed to get job resumes: ' + err.message);
+      return [];
     }
+  };
 
-    return isHealthy;
-  } catch (error) {
-    console.warn('Health check failed:', error.message);
-    return false;
+  if (loading) {
+    return <div className="text-center py-4">Loading jobs...</div>;
   }
-};
 
-// CORS testing utility
-export const testCORS = async () => {
-  try {
-    console.log('Testing CORS configuration...');
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">Job Management</h1>
 
-    const optionsResponse = await fetch(`${API_BASE_URL}/api/status`, {
-      method: 'OPTIONS',
-      mode: 'cors',
-      credentials: 'include',
-      headers: {
-        'Origin': window.location.origin,
-        'Access-Control-Request-Method': 'GET',
-        'Access-Control-Request-Headers': 'Content-Type, X-User-Id'
-      }
-    });
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
 
-    console.log('OPTIONS response status:', optionsResponse.status);
-    console.log('OPTIONS response headers:');
-    for (const [key, value] of optionsResponse.headers.entries()) {
-      if (key.toLowerCase().includes('access-control')) {
-        console.log(`  ${key}: ${value}`);
-      }
-    }
+      {/* User Settings Info */}
+      {userSettings && (
+        <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-6">
+          <h3 className="font-medium text-blue-900">Current Settings:</h3>
+          <p className="text-sm text-blue-700">
+            Model: {userSettings.model} |
+            API Key: {userSettings.openaiApiKey ? '✓ Configured' : '✗ Not set'} |
+            Include Objective: {userSettings.includeObjective ? 'Yes' : 'No'}
+          </p>
+        </div>
+      )}
 
-    const getResponse = await healthCheck();
+      {/* Add Job by URL */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-medium mb-4">Add Job by URL</h2>
+        <div className="flex gap-4">
+          <input
+            type="url"
+            value={jobUrl}
+            onChange={(e) => setJobUrl(e.target.value)}
+            placeholder="https://company.com/job-posting"
+            className="flex-1 border border-gray-300 rounded px-3 py-2"
+          />
+          <button
+            onClick={() => handleAddJobByUrl(jobUrl)}
+            disabled={!jobUrl || loading}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            Add Job
+          </button>
+        </div>
+      </div>
 
-    return {
-      optionsOk: optionsResponse.ok,
-      getOk: getResponse,
-      corsConfigured: optionsResponse.headers.get('access-control-allow-origin') !== null
-    };
-  } catch (error) {
-    console.error('CORS test failed:', error);
-    return {
-      optionsOk: false,
-      getOk: false,
-      corsConfigured: false,
-      error: error.message
-    };
+      {/* Add Job by Description */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-medium mb-4">Add Job by Description</h2>
+        <div className="space-y-4">
+          <textarea
+            value={jobDescription}
+            onChange={(e) => setJobDescription(e.target.value)}
+            placeholder="Paste the job description text here..."
+            rows={6}
+            className="w-full border border-gray-300 rounded px-3 py-2"
+          />
+          <button
+            onClick={() => handleAddJobByDescription(jobDescription)}
+            disabled={!jobDescription || loading}
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+          >
+            Add Job from Description
+          </button>
+        </div>
+      </div>
+
+      {/* Jobs List */}
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-medium">Your Jobs ({jobs.length})</h2>
+        </div>
+
+        <div className="divide-y divide-gray-200">
+          {jobs.map((job) => (
+            <div key={job.id} className="p-6">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {job.metadata?.title || 'Job Title Not Available'}
+                  </h3>
+                  <p className="text-gray-600">
+                    {job.metadata?.company || 'Company Not Available'}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Status: <span className="font-medium">{job.status}</span>
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Added: {new Date(job.date_found).toLocaleDateString()}
+                  </p>
+                  {job.metadata?.input_method === 'description' && (
+                    <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                      From Description
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-2 ml-4">
+                  <select
+                    value={job.status}
+                    onChange={(e) => handleUpdateJobStatus(job.id, e.target.value)}
+                    className="border border-gray-300 rounded px-2 py-1 text-sm"
+                  >
+                    <option value="new">New</option>
+                    <option value="applied">Applied</option>
+                    <option value="interviewing">Interviewing</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="offered">Offered</option>
+                  </select>
+
+                  <button
+                    onClick={() => handleGenerateResume(job.id)}
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                  >
+                    Generate Resume
+                  </button>
+
+                  <button
+                    onClick={() => handleGetJobResumes(job.id)}
+                    className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700"
+                  >
+                    View Resumes
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteJob(job.id, false)}
+                    className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {jobs.length === 0 && (
+            <div className="p-6 text-center text-gray-500">
+              No jobs found. Add your first job using the forms above.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default JobsComponent;
+
+  if (loading) {
+    return <div className="text-center py-4">Loading jobs...</div>;
   }
-};
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">Job Management</h1>
+
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+
+      {/* User Settings Info */}
+      {userSettings && (
+        <div className="bg-blue-50 border border-blue-200 rounded p-4 mb-6">
+          <h3 className="font-medium text-blue-900">Current Settings:</h3>
+          <p className="text-sm text-blue-700">
+            Model: {userSettings.model} |
+            API Key: {userSettings.openaiApiKey ? '✓ Configured' : '✗ Not set'} |
+            Include Objective: {userSettings.includeObjective ? 'Yes' : 'No'}
+          </p>
+        </div>
+      )}
+
+      {/* Add Job by URL */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-medium mb-4">Add Job by URL</h2>
+        <div className="flex gap-4">
+          <input
+            type="url"
+            value={jobUrl}
+            onChange={(e) => setJobUrl(e.target.value)}
+            placeholder="https://company.com/job-posting"
+            className="flex-1 border border-gray-300 rounded px-3 py-2"
+          />
+          <button
+            onClick={() => handleAddJobByUrl(jobUrl)}
+            disabled={!jobUrl || loading}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            Add Job
+          </button>
+        </div>
+      </div>
+
+      {/* Add Job by Description */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-medium mb-4">Add Job by Description</h2>
+        <div className="space-y-4">
+          <textarea
+            value={jobDescription}
+            onChange={(e) => setJobDescription(e.target.value)}
+            placeholder="Paste the job description text here..."
+            rows={6}
+            className="w-full border border-gray-300 rounded px-3 py-2"
+          />
+          <button
+            onClick={() => handleAddJobByDescription(jobDescription)}
+            disabled={!jobDescription || loading}
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+          >
+            Add Job from Description
+          </button>
+        </div>
+      </div>
+
+      {/* Jobs List */}
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-medium">Your Jobs ({jobs.length})</h2>
+        </div>
+
+        <div className="divide-y divide-gray-200">
+          {jobs.map((job) => (
+            <div key={job.id} className="p-6">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {job.metadata?.title || 'Job Title Not Available'}
+                  </h3>
+                  <p className="text-gray-600">
+                    {job.metadata?.company || 'Company Not Available'}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Status: <span className="font-medium">{job.status}</span>
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Added: {new Date(job.date_found).toLocaleDateString()}
+                  </p>
+                  {job.metadata?.input_method === 'description' && (
+                    <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                      From Description
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-2 ml-4">
+                  <select
+                    value={job.status}
+                    onChange={(e) => handleUpdateJobStatus(job.id, e.target.value)}
+                    className="border border-gray-300 rounded px-2 py-1 text-sm"
+                  >
+                    <option value="new">New</option>
+                    <option value="applied">Applied</option>
+                    <option value="interviewing">Interviewing</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="offered">Offered</option>
+                  </select>
+
+                  <button
+                    onClick={() => handleGenerateResume(job.id)}
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                  >
+                    Generate Resume
+                  </button>
+
+                  <button
+                    onClick={() => handleGetJobResumes(job.id)}
+                    className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700"
+                  >
+                    View Resumes
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteJob(job.id, false)}
+                    className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {jobs.length === 0 && (
+            <div className="p-6 text-center text-gray-500">
+              No jobs found. Add your first job using the forms above.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default JobsComponent;

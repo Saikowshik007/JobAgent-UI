@@ -28,7 +28,9 @@ function Settings() {
 
   // Available ChatGPT models
   const availableModels = [
-    { value: "gpt-4o", label: "GPT-4o (Latest, Multimodal)", description: "Most capable model with vision capabilities" },
+   { value: "gpt-5", label: "GPT-5 (Latest, Multimodal)", description: "Flagship model for coding, reasoning, and agentic tasks across domains" },
+    { value: "gpt-5-mini", label: "GPT-5 Mini (Latest, Multimodal)", description: "A faster, more cost-efficient version of GPT-5 for well-defined tasks" },
+    { value: "gpt-4o", label: "GPT-4o (Multimodal)", description: "Most capable model with vision capabilities" },
     { value: "gpt-4o-mini", label: "GPT-4o Mini", description: "Faster and more cost-effective version of GPT-4o" },
     { value: "gpt-4-turbo", label: "GPT-4 Turbo", description: "Previous generation flagship model" },
     { value: "gpt-4", label: "GPT-4", description: "Original GPT-4 model" },
