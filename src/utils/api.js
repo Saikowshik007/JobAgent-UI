@@ -1,9 +1,4 @@
-// src/utils/api.js
-// Full API client (system, jobs, resume, simplify, health) with user-object support.
-// IMPORTANT: For endpoints that depend on FastAPI Depends(get_user), we embed `user`.
-// - FormData endpoints: append('user', JSON.stringify(user))
-// - JSON endpoints: { ..., user }
-
+import { auth } from '../firebase/firebase';
 const API_BASE_URL =
   process.env.REACT_APP_API_BASE_URL ||
   (process.env.NODE_ENV === 'production'
