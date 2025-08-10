@@ -162,10 +162,10 @@ export const systemApi = {
   }
 };
 
-// Jobs API - Updated to match your OpenAPI spec
+// Jobs API - Updated to match Python API contract
 export const jobsApi = {
-  // Get all jobs with filtering
-  getJobs(params = {}) {
+  // Get all jobs with filtering - Updated to include user_id in path
+  getJobs(userId, params = {}) {
     const queryParams = new URLSearchParams();
 
     Object.entries(params).forEach(([key, value]) => {
@@ -175,16 +175,16 @@ export const jobsApi = {
     });
 
     const queryString = queryParams.toString();
-    return apiRequest(`/api/jobs/${queryString ? '?' + queryString : ''}`);
+    return apiRequest(`/api/jobs/${userId}${queryString ? '?' + queryString : ''}`);
   },
 
-  // Get specific job
-  getJob(jobId) {
-    return apiRequest(`/api/jobs/${jobId}`);
+  // Get specific job - Updated to include user_id in path
+  getJob(userId, jobId) {
+    return apiRequest(`/api/jobs/${userId}/${jobId}`);
   },
 
   // Analyze job from URL
-  analyzeJob(jobUrl, status = null, apiKey = null) {
+  analyzeJob(jobUrl, status = null, userSettings = {}) {
     const formData = new FormData();
     formData.append('job_url', jobUrl);
     if (status) {
@@ -192,8 +192,13 @@ export const jobsApi = {
     }
 
     const headers = {};
-    if (apiKey) {
-      headers['X-Api-Key'] = apiKey;
+    // Add API key if provided in user settings
+    if (userSettings.openaiApiKey) {
+      headers['X-Api-Key'] = userSettings.openaiApiKey;
+    }
+    // Add model if provided in user settings
+    if (userSettings.model) {
+      headers['X-Model'] = userSettings.model;
     }
 
     return apiRequestWithRetry('/api/jobs/analyze', {
@@ -203,123 +208,143 @@ export const jobsApi = {
     });
   },
 
-  // Update job status
-  updateJobStatus(jobId, status) {
-    return apiRequest(`/api/jobs/${jobId}/status`, {
+  // Analyze job from description text - New endpoint
+  analyzeJobDescription(jobDescription, status = null, userSettings = {}) {
+    const formData = new FormData();
+    formData.append('job_description', jobDescription);
+    if (status) {
+      formData.append('status', status);
+    }
+
+    const headers = {};
+    // Add API key if provided in user settings
+    if (userSettings.openaiApiKey) {
+      headers['X-Api-Key'] = userSettings.openaiApiKey;
+    }
+    // Add model if provided in user settings
+    if (userSettings.model) {
+      headers['X-Model'] = userSettings.model;
+    }
+
+    return apiRequestWithRetry('/api/jobs/analyze-description', {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+  },
+
+  // Update job status - Updated to include user_id in path
+  updateJobStatus(userId, jobId, status) {
+    return apiRequest(`/api/jobs/${userId}/${jobId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status })
     });
   },
 
-  // Delete job
-  deleteJob(jobId, cascadeResumes = false) {
+  // Delete job - Updated to include user_id in path
+  deleteJob(userId, jobId, cascadeResumes = false) {
     const params = new URLSearchParams();
     if (cascadeResumes) {
       params.append('cascade_resumes', 'true');
     }
 
-    return apiRequest(`/api/jobs/${jobId}${params.toString() ? '?' + params.toString() : ''}`, {
+    return apiRequest(`/api/jobs/${userId}/${jobId}${params.toString() ? '?' + params.toString() : ''}`, {
       method: 'DELETE'
     });
   },
 
-  // Delete multiple jobs
-  deleteJobsBatch(jobIds, cascadeResumes = false) {
+  // Delete multiple jobs - Updated to include user_id in path
+  deleteJobsBatch(userId, jobIds, cascadeResumes = false) {
     const params = new URLSearchParams();
     if (cascadeResumes) {
       params.append('cascade_resumes', 'true');
     }
 
-    return apiRequest(`/api/jobs/batch${params.toString() ? '?' + params.toString() : ''}`, {
+    return apiRequest(`/api/jobs/${userId}/batch${params.toString() ? '?' + params.toString() : ''}`, {
       method: 'DELETE',
       body: JSON.stringify(jobIds)
     });
   },
 
-  // Get job statistics
-  getJobStats() {
-    return apiRequest('/api/jobs/status');
+  // Get job statistics - Updated to include user_id in path
+  getJobStats(userId) {
+    return apiRequest(`/api/jobs/${userId}/status`);
   },
 
-  // Get resumes for a specific job
-  getJobResumes(jobId) {
-    return apiRequest(`/api/jobs/${jobId}/resumes`);
+  // Get resumes for a specific job - Updated to include user_id in path
+  getJobResumes(userId, jobId) {
+    return apiRequest(`/api/jobs/${userId}/${jobId}/resumes`);
   },
 
   // Legacy method for compatibility
-  addJobByUrl(jobUrl, apiKey) {
-    return this.analyzeJob(jobUrl, null, apiKey);
+  addJobByUrl(jobUrl, userSettings) {
+    return this.analyzeJob(jobUrl, null, userSettings);
   },
 
-    // Legacy methods for compatibility
+  // Legacy methods for compatibility
   getSystemStatus: () => systemApi.getStatus(),
   generateResume: (jobId, settings, customize = true, template = "standard") => {
     return resumeApi.generateResume(jobId, settings, customize, template);
   },
-  getResumeYaml: (resumeId) => resumeApi.getResumeYaml(resumeId),
-  getResumeStatus: (resumeId) => resumeApi.getResumeStatus(resumeId)
+  getResumeYaml: (userId, resumeId) => resumeApi.getResumeYaml(userId, resumeId),
+  getResumeStatus: (userId, resumeId) => resumeApi.getResumeStatus(userId, resumeId)
 };
 
-// Resume API - Updated to match your OpenAPI spec
+// Resume API - Updated to match Python API contract
 export const resumeApi = {
   // Generate resume with enhanced settings support
-  generateResume(jobId, settings, customize = true, template = "standard", handleExisting = "replace") {
-    const apiKey = settings?.openaiApiKey || "";
-    const resumeData = settings?.resumeData || null;
-    const includeObjective = settings?.includeObjective;
-
-    console.log(`Generating resume for job ${jobId} with resume data: ${resumeData ? 'Present' : 'Not provided'}`);
-    console.log(`Include objective: ${includeObjective}`);
+  generateResume(jobId, userSettings, customize = true, template = "standard", handleExisting = "replace") {
+    console.log(`Generating resume for job ${jobId} with user settings`);
 
     const requestBody = {
       job_id: jobId,
       customize: customize,
-      template: template
+      template: template,
+      user: {
+        id: userSettings.userId || auth.currentUser?.uid,
+        api_key: userSettings.openaiApiKey || "",
+        model: userSettings.model || "gpt-4o"
+      }
     };
 
-    if (resumeData) {
-      requestBody.resume_data = resumeData;
+    // Add resume data if provided
+    if (userSettings.resumeData) {
+      requestBody.resume_data = userSettings.resumeData;
       console.log("Including user's resume data in generation request");
     }
 
     // Add includeObjective flag if provided
-    if (includeObjective !== undefined) {
-      requestBody.include_objective = includeObjective;
-      console.log(`Including include_objective flag: ${includeObjective}`);
+    if (userSettings.includeObjective !== undefined) {
+      requestBody.include_objective = userSettings.includeObjective;
+      console.log(`Including include_objective flag: ${userSettings.includeObjective}`);
     }
 
     const params = new URLSearchParams();
     params.append('handle_existing', handleExisting);
 
-    const headers = {};
-    if (apiKey) {
-      headers['X-Api-Key'] = apiKey;
-    }
-
     return apiRequestWithRetry(`/api/resume/generate?${params.toString()}`, {
       method: 'POST',
-      headers,
       body: JSON.stringify(requestBody)
     });
   },
 
-  // Get resume status
-  getResumeStatus(resumeId) {
-    return apiRequest(`/api/resume/${resumeId}/status`);
+  // Get resume status - Updated to include user_id in path
+  getResumeStatus(userId, resumeId) {
+    return apiRequest(`/api/resume/${userId}/${resumeId}/status`);
   },
 
-  // Download resume
-  downloadResume(resumeId, format = 'yaml') {
+  // Download resume - Updated to include user_id in path
+  downloadResume(userId, resumeId, format = 'yaml') {
     const params = new URLSearchParams();
     params.append('format', format);
 
-    return apiRequest(`/api/resume/${resumeId}/download?${params.toString()}`);
+    return apiRequest(`/api/resume/${userId}/${resumeId}/download?${params.toString()}`);
   },
 
-  // Get resume YAML content
-  async getResumeYaml(resumeId) {
+  // Get resume YAML content - Updated to include user_id in path
+  async getResumeYaml(userId, resumeId) {
     try {
-      const response = await this.downloadResume(resumeId, 'yaml');
+      const response = await this.downloadResume(userId, resumeId, 'yaml');
       return response.content;
     } catch (error) {
       console.error('Error downloading resume YAML:', error);
@@ -327,43 +352,43 @@ export const resumeApi = {
     }
   },
 
-  // Upload custom resume
-  uploadResume(file, jobId = null) {
+  // Upload custom resume - Updated to include user_id in path
+  uploadResume(userId, file, jobId = null) {
     const formData = new FormData();
     formData.append('file', file);
     if (jobId) {
       formData.append('job_id', jobId);
     }
 
-    return apiRequest('/api/resume/upload', {
+    return apiRequest(`/api/resume/${userId}/upload`, {
       method: 'POST',
       body: formData
     });
   },
 
-  // Update resume YAML
-  updateResumeYaml(resumeId, yamlContent) {
+  // Update resume YAML - Updated to include user_id in path
+  updateResumeYaml(userId, resumeId, yamlContent) {
     const formData = new FormData();
     formData.append('yaml_content', yamlContent);
 
-    return apiRequest(`/api/resume/${resumeId}/update-yaml`, {
+    return apiRequest(`/api/resume/${userId}/${resumeId}/update-yaml`, {
       method: 'POST',
       body: formData
     });
   },
 
-  // Delete resume
-  deleteResume(resumeId, updateJob = true) {
+  // Delete resume - Updated to include user_id in path
+  deleteResume(userId, resumeId, updateJob = true) {
     const params = new URLSearchParams();
     params.append('update_job', updateJob.toString());
 
-    return apiRequest(`/api/resume/${resumeId}?${params.toString()}`, {
+    return apiRequest(`/api/resume/${userId}/${resumeId}?${params.toString()}`, {
       method: 'DELETE'
     });
   },
 
-  // Get user resumes
-  getUserResumes(params = {}) {
+  // Get user resumes - Updated to include user_id in path
+  getUserResumes(userId, params = {}) {
     const queryParams = new URLSearchParams();
 
     Object.entries(params).forEach(([key, value]) => {
@@ -373,16 +398,16 @@ export const resumeApi = {
     });
 
     const queryString = queryParams.toString();
-    return apiRequest(`/api/resume/${queryString ? '?' + queryString : ''}`);
+    return apiRequest(`/api/resume/${userId}/${queryString ? '?' + queryString : ''}`);
   },
 
-  // Get active resume generations
-  getActiveResumeGenerations() {
-    return apiRequest('/api/resume/active');
+  // Get active resume generations - Updated to include user_id in path
+  getActiveResumeGenerations(userId) {
+    return apiRequest(`/api/resume/${userId}/active`);
   },
 
-  // Polling for resume status
-  async pollResumeStatus(resumeId, maxAttempts = 20, interval = 3000) {
+  // Polling for resume status - Updated to include user_id
+  async pollResumeStatus(userId, resumeId, maxAttempts = 20, interval = 3000) {
     let attempts = 0;
     let lastStatus = null;
 
@@ -394,7 +419,7 @@ export const resumeApi = {
             return;
           }
 
-          const statusData = await this.getResumeStatus(resumeId);
+          const statusData = await this.getResumeStatus(userId, resumeId);
           attempts++;
 
           if (!lastStatus || lastStatus !== statusData.status) {
@@ -435,29 +460,29 @@ export const resumeApi = {
   },
 };
 
-// Simplify API - Updated to match your OpenAPI spec
+// Simplify API - Updated to match Python API contract with user_id in path
 export const simplifyApi = {
-  // Store authentication tokens
-  storeTokens(tokens) {
-    console.log('🔑 Storing authentication tokens...');
-    return apiRequest('/api/simplify/store-tokens', {
+  // Store authentication tokens - Updated to include user_id in path
+  storeTokens(userId, tokens) {
+    console.log(`🔑 Storing authentication tokens for user ${userId}...`);
+    return apiRequest(`/api/simplify/${userId}/store-tokens`, {
       method: 'POST',
       body: JSON.stringify(tokens)
     });
   },
 
-  // Check session validity
-  checkSession() {
-    return apiRequest('/api/simplify/check-session');
+  // Check session validity - Updated to include user_id in path
+  checkSession(userId) {
+    return apiRequest(`/api/simplify/${userId}/check-session`);
   },
 
-  // Get stored tokens
-  getStoredTokens() {
-    return apiRequest('/api/simplify/get-tokens');
+  // Get stored tokens - Updated to include user_id in path
+  getStoredTokens(userId) {
+    return apiRequest(`/api/simplify/${userId}/get-tokens`);
   },
 
-  // Upload PDF resume to Simplify
-  uploadResumeToSimplify(pdfBlob, resumeId, jobId = null) {
+  // Upload PDF resume to Simplify - Updated to include user_id in path
+  uploadResumeToSimplify(userId, pdfBlob, resumeId, jobId = null) {
     console.log('📤 Uploading resume to Simplify via backend proxy...');
 
     const formData = new FormData();
@@ -469,7 +494,7 @@ export const simplifyApi = {
       formData.append('job_id', jobId);
     }
 
-    return apiRequest('/api/simplify/upload-resume-pdf', {
+    return apiRequest(`/api/simplify/${userId}/upload-resume-pdf`, {
       method: 'POST',
       body: formData
     });

@@ -1,4 +1,4 @@
-// src/components/Settings.js - Refactored using reusable components and hooks
+// src/components/Settings.js - Updated with ChatGPT model selection
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
@@ -26,9 +26,19 @@ function Settings() {
   const [activeTab, setActiveTab] = useState("account");
   const [resumeFile, setResumeFile] = useState(null);
 
+  // Available ChatGPT models
+  const availableModels = [
+    { value: "gpt-4o", label: "GPT-4o (Latest, Multimodal)", description: "Most capable model with vision capabilities" },
+    { value: "gpt-4o-mini", label: "GPT-4o Mini", description: "Faster and more cost-effective version of GPT-4o" },
+    { value: "gpt-4-turbo", label: "GPT-4 Turbo", description: "Previous generation flagship model" },
+    { value: "gpt-4", label: "GPT-4", description: "Original GPT-4 model" },
+    { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo", description: "Fast and economical option" }
+  ];
+
   // Account settings form data
   const [formData, setFormData] = useState({
     openaiApiKey: "",
+    model: "gpt-4o", // Add model field
     settings: {
       selenium: {
         headless: true
@@ -38,7 +48,7 @@ function Settings() {
         search_cache_size: 100
       },
       resume: {
-        include_objective: false // Add this default
+        include_objective: false
       }
     }
   });
@@ -56,6 +66,7 @@ function Settings() {
         if (settings) {
           setFormData({
             openaiApiKey: settings.openaiApiKey || "",
+            model: settings.model || "gpt-4o", // Load model preference
             settings: {
               selenium: {
                 headless: settings.settings?.selenium?.headless ?? true
@@ -65,7 +76,7 @@ function Settings() {
                 search_cache_size: settings.settings?.cache?.search_cache_size ?? 100
               },
               resume: {
-                include_objective: settings.settings?.resume?.include_objective ?? true // Add this
+                include_objective: settings.settings?.resume?.include_objective ?? true
               }
             }
           });
@@ -186,10 +197,18 @@ function Settings() {
       setSuccess("");
       setLoading(true);
 
-      // Update user settings
+      // Update user settings including the model preference and features
       await updateUserSettings({
         openaiApiKey: formData.openaiApiKey,
-        settings: formData.settings
+        model: formData.model, // Include model in settings
+        settings: formData.settings,
+        // Ensure features are maintained
+        features: {
+          advanced_parsing: true,
+          batch_operations: true,
+          simplify_integration: true,
+          custom_templates: true
+        }
       });
 
       // Update resume data
@@ -276,7 +295,7 @@ function Settings() {
               {activeTab === "account" && (
                   <div className="space-y-6">
                     <div className="bg-gray-50 p-4 rounded-lg">
-                      <h3 className="text-lg font-medium text-gray-900 mb-4">API Keys</h3>
+                      <h3 className="text-lg font-medium text-gray-900 mb-4">API Configuration</h3>
 
                       <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
                         <div className="sm:col-span-6">
@@ -291,11 +310,40 @@ function Settings() {
                                 className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
                                 value={formData.openaiApiKey}
                                 onChange={handleInputChange}
+                                placeholder="sk-..."
                             />
                           </div>
                           <p className="mt-2 text-sm text-gray-500">
-                            Used for AI-powered features like resume generation.
+                            Used for AI-powered features like resume generation and job analysis.
                           </p>
+                        </div>
+
+                        <div className="sm:col-span-6">
+                          <label htmlFor="model" className="block text-sm font-medium text-gray-700">
+                            AI Model Selection
+                          </label>
+                          <div className="mt-1">
+                            <select
+                                name="model"
+                                id="model"
+                                className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                value={formData.model}
+                                onChange={handleInputChange}
+                            >
+                              {availableModels.map((model) => (
+                                  <option key={model.value} value={model.value}>
+                                    {model.label}
+                                  </option>
+                              ))}
+                            </select>
+                          </div>
+                          <p className="mt-2 text-sm text-gray-500">
+                            {availableModels.find(m => m.value === formData.model)?.description ||
+                             "Select the ChatGPT model to use for AI-powered features."}
+                          </p>
+                          <div className="mt-2 text-xs text-gray-400">
+                            <strong>Current selection:</strong> {formData.model}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -466,6 +514,7 @@ function Settings() {
                           </div>
                         </div>
                       </div>
+
                       {/* Education */}
                       <div className="p-4 border-b border-gray-200">
                         <div className="flex justify-between items-center mb-4">
