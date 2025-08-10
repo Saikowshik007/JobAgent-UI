@@ -203,6 +203,9 @@ export const jobsApi = {
 
   // Analyze job from URL
   analyzeJob(jobUrl, status = null, userSettings = {}) {
+    const user = auth.currentUser;
+    if (!user) throw new Error('User not authenticated');
+
     const formData = new FormData();
     formData.append('job_url', jobUrl);
     if (status) {
@@ -210,6 +213,10 @@ export const jobsApi = {
     }
 
     const headers = {};
+
+    // Add user ID header - required by get_user_from_form dependency
+    headers['X-User-Id'] = user.uid;
+
     // Add API key if provided in user settings
     if (userSettings.openaiApiKey) {
       headers['X-Api-Key'] = userSettings.openaiApiKey;
@@ -228,6 +235,9 @@ export const jobsApi = {
 
   // Analyze job from description text - New endpoint
   analyzeJobDescription(jobDescription, status = null, userSettings = {}) {
+    const user = auth.currentUser;
+    if (!user) throw new Error('User not authenticated');
+
     const formData = new FormData();
     formData.append('job_description', jobDescription);
     if (status) {
@@ -235,6 +245,10 @@ export const jobsApi = {
     }
 
     const headers = {};
+
+    // Add user ID header - required by get_user_from_form dependency
+    headers['X-User-Id'] = user.uid;
+
     // Add API key if provided in user settings
     if (userSettings.openaiApiKey) {
       headers['X-Api-Key'] = userSettings.openaiApiKey;
