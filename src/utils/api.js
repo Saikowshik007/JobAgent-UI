@@ -212,19 +212,16 @@ export const jobsApi = {
       formData.append('status', status);
     }
 
+    // Add user data as JSON string in form data - required by get_user_from_form
+    const userData = {
+      id: user.uid,
+      api_key: userSettings.openaiApiKey || "",
+      model: userSettings.model || "gpt-4o"
+    };
+    formData.append('user', JSON.stringify(userData));
+
     const headers = {};
-
-    // Add user ID header - required by get_user_from_form dependency
-    headers['X-User-Id'] = user.uid;
-
-    // Add API key if provided in user settings
-    if (userSettings.openaiApiKey) {
-      headers['X-Api-Key'] = userSettings.openaiApiKey;
-    }
-    // Add model if provided in user settings
-    if (userSettings.model) {
-      headers['X-Model'] = userSettings.model;
-    }
+    // Note: Don't set Content-Type for FormData - browser will set it automatically with boundary
 
     return apiRequestWithRetry('/api/jobs/analyze', {
       method: 'POST',
@@ -244,19 +241,16 @@ export const jobsApi = {
       formData.append('status', status);
     }
 
+    // Add user data as JSON string in form data - required by get_user_from_form
+    const userData = {
+      id: user.uid,
+      api_key: userSettings.openaiApiKey || "",
+      model: userSettings.model || "gpt-4o"
+    };
+    formData.append('user', JSON.stringify(userData));
+
     const headers = {};
-
-    // Add user ID header - required by get_user_from_form dependency
-    headers['X-User-Id'] = user.uid;
-
-    // Add API key if provided in user settings
-    if (userSettings.openaiApiKey) {
-      headers['X-Api-Key'] = userSettings.openaiApiKey;
-    }
-    // Add model if provided in user settings
-    if (userSettings.model) {
-      headers['X-Model'] = userSettings.model;
-    }
+    // Note: Don't set Content-Type for FormData - browser will set it automatically with boundary
 
     return apiRequestWithRetry('/api/jobs/analyze-description', {
       method: 'POST',
