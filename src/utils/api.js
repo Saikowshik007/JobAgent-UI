@@ -30,7 +30,10 @@ async function apiRequest(endpoint, options = {}) {
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
-
+  const user = auth.currentUser;
+    if (user) {
+      headers['X-User-Id'] = user.uid;
+    }
   const cfg = {
     method: 'GET',
     mode: 'cors',
