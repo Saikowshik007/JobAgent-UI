@@ -155,17 +155,18 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
       });
 
       // Use resumeApi.generateResume with the enhanced settings
-      const response = await resumeApi.generateResume(
+        await resumeApi.generateResume(
           job.id,
           {
             openaiApiKey: userSettings?.openaiApiKey,
+            model: userSettings?.model || userSettings?.settings?.model || "gpt-4o",
             resumeData: userResumeData,
             includeObjective: includeObjective
           },
           true, // customize
           "standard", // template
           "replace" // handleExisting
-      );
+        );
 
       if (response && response.resume_id) {
         setResumeId(response.resume_id);
