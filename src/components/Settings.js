@@ -40,8 +40,8 @@ function Settings() {
   // Account settings form data
   const [formData, setFormData] = useState({
     openaiApiKey: "",
-    model: "gpt-4o", // Add model field
     settings: {
+      model: "gpt-4o", // Move model INSIDE settings
       selenium: {
         headless: true
       },
@@ -68,8 +68,8 @@ function Settings() {
         if (settings) {
           setFormData({
             openaiApiKey: settings.openaiApiKey || "",
-            model: settings.model || "gpt-4o", // Load model preference
             settings: {
+              model: settings.model || settings.settings?.model || "gpt-4o", // Load model from either location
               selenium: {
                 headless: settings.settings?.selenium?.headless ?? true
               },
@@ -108,10 +108,13 @@ function Settings() {
     const { name, value, type, checked } = e.target;
 
     if (name === "model") {
-      // Handle model at root level, not nested
+      // Handle model INSIDE settings, not at root level
       setFormData(prev => ({
         ...prev,
-        model: value  // Root level model
+        settings: {
+          ...prev.settings,
+          model: value  // Model goes in settings
+        }
       }));
     } else if (name === "headless") {
       setFormData(prev => ({
@@ -214,18 +217,14 @@ function Settings() {
 
       console.log('Saving settings to Firebase:', {
         openaiApiKey: formData.openaiApiKey ? `${formData.openaiApiKey.substring(0, 10)}...` : 'NOT SET',
-        model: formData.model,
+        model: formData.settings.model, // Model is now in settings
         settings: formData.settings
       }); // Debug log
 
-      // Explicitly structure the update to ensure model is in both locations
+      // Structure the update to save model ONLY in settings, not at root
       const updateData = {
         openaiApiKey: formData.openaiApiKey,  // Root level
-        model: formData.model,                // Root level (for AuthContext)
-        settings: {
-          ...formData.settings,
-          model: formData.model               // Also in settings (for your app logic)
-        },
+        settings: formData.settings,          // This includes model inside settings
         features: {
           advanced_parsing: true,
           batch_operations: true,
@@ -369,7 +368,7 @@ function Settings() {
                                 name="model"
                                 id="model"
                                 className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                                value={formData.model}
+                                value={formData.settings.model}
                                 onChange={handleInputChange}
                             >
                               {availableModels.map((model) => (
