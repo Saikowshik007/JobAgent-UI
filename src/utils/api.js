@@ -143,34 +143,34 @@ async function apiRequestWithRetry(endpoint, options = {}, maxRetries = 3) {
   throw lastError;
 }
 
-// System API - Updated to automatically use current user from Firebase auth
+// System API - Updated to match the correct backend routes
 export const systemApi = {
   getStatus() {
     const user = auth.currentUser;
     if (!user) throw new Error('User not authenticated');
 
-    return apiRequest(`/api/system/${user.uid}/status`);
+    return apiRequest(`/api/${user.uid}/status`);
   },
 
   clearCache() {
     const user = auth.currentUser;
     if (!user) throw new Error('User not authenticated');
 
-    return apiRequest(`/api/system/${user.uid}/cache/clear`, { method: 'DELETE' });
+    return apiRequest(`/api/${user.uid}/cache/clear`, { method: 'DELETE' });
   },
 
   cleanupCache() {
     const user = auth.currentUser;
     if (!user) throw new Error('User not authenticated');
 
-    return apiRequest(`/api/system/${user.uid}/cache/cleanup`, { method: 'POST' });
+    return apiRequest(`/api/${user.uid}/cache/cleanup`, { method: 'POST' });
   },
 
   getCacheStats() {
     const user = auth.currentUser;
     if (!user) throw new Error('User not authenticated');
 
-    return apiRequest(`/api/system/${user.uid}/cache/stats`);
+    return apiRequest(`/api/${user.uid}/cache/stats`);
   }
 };
 
@@ -576,14 +576,14 @@ export const simplifyApi = {
   }
 };
 
-// Enhanced health check function - Updated to automatically use current user
+// Enhanced health check function - Updated to use correct endpoint
 export const healthCheck = async () => {
   try {
     console.log('Performing health check...');
 
     const user = auth.currentUser;
     // If user is authenticated, use user-specific endpoint, otherwise use general endpoint
-    const endpoint = user ? `/api/system/${user.uid}/status` : '/api/status';
+    const endpoint = user ? `/api/${user.uid}/status` : '/api/status';
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'GET',
