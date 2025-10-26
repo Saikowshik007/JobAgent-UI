@@ -1,7 +1,7 @@
 // ResumeYamlModal.js - Updated with Helvetica font and proper character handling
 import React, { useState, useEffect, useRef } from 'react';
 import yaml from 'js-yaml';
-import { Document, Page, Text, View, StyleSheet, PDFViewer, Font, Link } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, PDFViewer, Font, Link, pdf } from '@react-pdf/renderer';
 import { useAuth } from "../contexts/AuthContext";
 import { useResumeData, useDragAndDrop } from '../hooks/useResumeData';
 import {
@@ -321,6 +321,48 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    try {
+      if (!resumeData || !resumeData.basic) {
+        alert("Resume data is not available");
+        return;
+      }
+
+      // Generate filename: fullname_role.pdf
+      const fullName = (resumeData.basic.name || 'resume')
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '');
+
+      const role = resumeData.experiences?.[0]?.titles?.[0]?.name ||
+                   resumeData.experiences?.[0]?.titles?.[0]?.title ||
+                   'professional';
+
+      const roleFormatted = role
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '');
+
+      const filename = `${fullName}_${roleFormatted}.pdf`;
+
+      // Generate PDF blob
+      const blob = await pdf(<ResumeDocument data={resumeData} userLocation={userLocation} />).toBlob();
+
+      // Download the PDF
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("PDF download error:", err);
+      alert("Failed to download PDF: " + err.message);
+    }
+  };
+
   const handleBackgroundClick = (e) => e.target === modalRef.current && onClose();
 
   if (!resumeData) return null;
@@ -329,24 +371,33 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
     <div ref={modalRef} className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center overflow-y-auto" onClick={handleBackgroundClick}>
       <div className="bg-white rounded-lg shadow-xl w-[98%] h-[98vh] flex flex-col max-w-[1600px]" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-2xl font-semibold text-gray-900">Resume Editor</h3>
-          <div className="flex items-center space-x-4">
+        <div className="p-4 lg:p-6 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <h3 className="text-xl lg:text-2xl font-semibold text-gray-900">Resume Editor</h3>
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowYamlView(!showYamlView)}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 font-medium"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 font-medium"
             >
               {showYamlView ? "Form View" : "YAML View"}
             </button>
             <button
               onClick={() => setShowPreview(!showPreview)}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 font-medium"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 font-medium"
             >
               {showPreview ? "Hide Preview" : "Show Preview"}
             </button>
             <button
+              onClick={handleDownloadPdf}
+              className="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+            >
+              <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Download PDF
+            </button>
+            <button
               onClick={handleSave}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
             >
               Save Changes
             </button>
@@ -376,11 +427,11 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
           )}
 
           {/* Tabs */}
-          <div className="border-b border-gray-200 mb-6">
-            <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          <div className="border-b border-gray-200 mb-6 overflow-x-auto">
+            <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max sm:min-w-0" aria-label="Tabs">
               {[
                 { id: "basic", label: "Basic Info" },
-                { id: "objective", label: "Professional Summary" },
+                { id: "objective", label: "Summary" },
                 { id: "education", label: "Education" },
                 { id: "experience", label: "Experience" },
                 { id: "projects", label: "Projects" },
@@ -393,7 +444,7 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
                     activeTab === tab.id
                       ? "border-indigo-500 text-indigo-600"
                       : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                  } whitespace-nowrap py-3 px-2 border-b-2 font-medium text-base`}
+                  } whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm sm:text-base`}
                 >
                   {tab.label}
                 </button>
@@ -402,9 +453,9 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
           </div>
 
           {/* Main Area */}
-          <div className={`flex-1 ${showPreview ? 'grid grid-cols-5 gap-6' : 'flex'} overflow-hidden`}>
+          <div className={`flex-1 ${showPreview ? 'flex flex-col lg:grid lg:grid-cols-5 gap-6' : 'flex'} overflow-hidden`}>
             {/* Editor Panel */}
-            <div className={`${showPreview ? 'col-span-2' : 'flex-1'} border rounded overflow-hidden`}>
+            <div className={`${showPreview ? 'flex-1 lg:col-span-2' : 'flex-1'} border rounded overflow-hidden`}>
               {showYamlView ? (
                 <textarea
                   value={yamlString}
@@ -989,12 +1040,12 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
 
             {/* Preview Panel */}
             {showPreview && (
-              <div className="col-span-3 border rounded bg-gray-100 overflow-hidden">
+              <div className="flex-1 lg:col-span-3 border rounded bg-gray-100 overflow-hidden min-h-[400px] lg:min-h-0">
                 {resumeData && (
-                  <PDFViewer 
-                    width="100%" 
-                    height="100%" 
-                    className="rounded" 
+                  <PDFViewer
+                    width="100%"
+                    height="100%"
+                    className="rounded"
                     key={`${JSON.stringify(resumeData)}-${Date.now()}`}
                   >
                     <ResumeDocument data={resumeData} userLocation={userLocation} />

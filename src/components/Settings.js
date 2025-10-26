@@ -6,6 +6,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import yaml from "js-yaml";
+import { pdf, Document, Page, Text, View, StyleSheet, Link } from '@react-pdf/renderer';
 import { useResumeData, useDragAndDrop } from "../hooks/useResumeData";
 import {
   DeleteButton,
@@ -18,6 +19,236 @@ import {
   DragHandle
 } from "./resume/ResumeFormComponents";
 
+// PDF styles for resume generation
+const styles = StyleSheet.create({
+  page: {
+    paddingTop: 30,
+    paddingBottom: 30,
+    paddingHorizontal: 40,
+    fontSize: 10,
+    fontFamily: 'Times-Roman',
+    lineHeight: 1.3,
+  },
+  header: {
+    fontSize: 13,
+    textAlign: 'center',
+    fontWeight: 'bold',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    fontFamily: 'Times-Roman'
+  },
+  contact: {
+    textAlign: 'center',
+    fontSize: 9,
+    marginBottom: 5,
+    fontFamily: 'Times-Roman'
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    marginTop: 8,
+    marginBottom: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: '#000000',
+    borderBottomStyle: 'solid',
+    paddingBottom: 1,
+    fontFamily: 'Times-Roman'
+  },
+  jobBlock: { marginBottom: 5 },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  jobTitle: {
+    fontStyle: 'italic',
+    fontFamily: 'Times-Roman'
+  },
+  bullet: {
+    marginLeft: 8,
+    marginBottom: 1,
+    fontFamily: 'Times-Roman'
+  },
+  textNormal: {
+    marginBottom: 3,
+    fontFamily: 'Times-Roman'
+  },
+  projectTitle: {
+    fontWeight: 'bold',
+    color: 'blue',
+    textDecoration: 'none',
+    fontFamily: 'Times-Roman'
+  },
+  projectTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 2,
+    flexWrap: 'wrap'
+  },
+  projectTech: {
+    fontSize: 8,
+    fontStyle: 'italic',
+    color: '#000000',
+    marginLeft: 8,
+    marginTop: 1,
+    fontFamily: 'Times-Roman'
+  },
+  boldText: {
+    fontWeight: 'bold',
+    fontFamily: 'Times-Roman'
+  }
+});
+
+// Text sanitization function
+const sanitizeText = (text) => {
+  if (text === null || text === undefined) return '';
+  const stringValue = String(text);
+  if (!isNaN(text) && !isNaN(parseFloat(text))) {
+    return stringValue;
+  }
+  return stringValue
+    .replace(/'/g, "'")
+    .replace(/"/g, '"')
+    .replace(/–/g, '-')
+    .replace(/—/g, '--')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\u2022/g, '•')
+    .trim();
+};
+
+// ResumeDocument component for PDF generation
+const ResumeDocument = ({ data, userLocation }) => {
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        {/* Header */}
+        {data.basic && (
+          <>
+            <Text style={styles.header}>{sanitizeText(data.basic.name) || 'Your Name'}</Text>
+            <Text style={styles.contact}>
+              {[
+                sanitizeText(data.basic.email),
+                sanitizeText(data.basic.phone),
+                sanitizeText(data.basic.address || userLocation),
+                ...(data.basic.websites || []).map(site => sanitizeText(site))
+              ].filter(Boolean).join(' | ')}
+            </Text>
+          </>
+        )}
+
+        {/* Objective Section */}
+        {data.objective && typeof data.objective === 'string' && data.objective.trim() && (
+          <>
+            <Text style={styles.sectionTitle}>Professional Summary</Text>
+            <Text style={styles.textNormal}>{sanitizeText(data.objective)}</Text>
+          </>
+        )}
+
+        {/* Experience Section */}
+        {data.experiences && data.experiences.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Experience</Text>
+            {data.experiences.map((exp, idx) => (
+              <View key={idx} style={styles.jobBlock}>
+                <View style={styles.row}>
+                  <Text style={styles.boldText}>
+                    {sanitizeText(exp.company) || 'Company Name'}
+                  </Text>
+                  <Text style={{ fontFamily: 'Times-Roman' }}>
+                    {sanitizeText(exp.titles?.[0]?.startdate)} - {sanitizeText(exp.titles?.[0]?.enddate)}
+                  </Text>
+                </View>
+                <View style={styles.row}>
+                  <Text style={styles.jobTitle}>
+                    {sanitizeText(exp.titles?.[0]?.name || exp.titles?.[0]?.title)}
+                  </Text>
+                  <Text style={styles.jobTitle}>{sanitizeText(exp.location)}</Text>
+                </View>
+                {exp.highlights?.map((point, i) => (
+                  <Text key={i} style={styles.bullet}>• {sanitizeText(point)}</Text>
+                ))}
+              </View>
+            ))}
+          </>
+        )}
+
+        {/* Projects Section */}
+        {data.projects && data.projects.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Projects</Text>
+            {data.projects.map((proj, idx) => (
+              <View key={idx} style={styles.jobBlock}>
+                <View style={styles.projectTitleRow}>
+                  {proj.link ? (
+                    <Link src={sanitizeText(proj.link)} style={styles.projectTitle}>
+                      {sanitizeText(proj.name)}
+                    </Link>
+                  ) : (
+                    <Text style={styles.boldText}>
+                      {sanitizeText(proj.name)}
+                    </Text>
+                  )}
+                  {proj.technologies && typeof proj.technologies === 'string' && proj.technologies.trim() && (
+                    <Text style={styles.projectTech}>({sanitizeText(proj.technologies)})</Text>
+                  )}
+                </View>
+                {proj.highlights?.map((point, i) => (
+                  <Text key={i} style={styles.bullet}>• {sanitizeText(point)}</Text>
+                ))}
+              </View>
+            ))}
+          </>
+        )}
+
+        {/* Education Section */}
+        {data.education && data.education.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Education</Text>
+            {data.education.map((edu, idx) => (
+              <View key={idx} style={styles.jobBlock}>
+                <View style={styles.row}>
+                  <Text style={styles.boldText}>
+                    {sanitizeText(edu.school)}, {sanitizeText(edu.degrees?.[0]?.names?.join(', '))}
+                    {edu.degrees?.[0]?.gpa && ` (GPA: ${sanitizeText(edu.degrees[0].gpa)})`}
+                  </Text>
+                  <Text style={{ fontFamily: 'Times-Roman' }}>
+                    {sanitizeText(edu.degrees?.[0]?.dates)}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+
+        {/* Skills Section */}
+        {data.skills && data.skills.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Skills</Text>
+            {data.skills.map((skillCategory, idx) => {
+              if (skillCategory.subcategories) {
+                return skillCategory.subcategories.map((subcat, subIdx) => (
+                  <Text key={`${idx}-${subIdx}`} style={styles.textNormal}>
+                    <Text style={styles.boldText}>
+                      {sanitizeText(subcat.name)}:
+                    </Text> {(subcat.skills || []).map(skill => sanitizeText(skill)).join(', ')}
+                  </Text>
+                ));
+              }
+              else if (skillCategory.skills) {
+                return (
+                  <Text key={idx} style={styles.textNormal}>
+                    <Text style={styles.boldText}>
+                      {sanitizeText(skillCategory.category)}:
+                    </Text> {skillCategory.skills.map(skill => sanitizeText(skill)).join(', ')}
+                  </Text>
+                );
+              }
+              return null;
+            })}
+          </>
+        )}
+      </Page>
+    </Document>
+  );
+};
+
 function Settings() {
   const { currentUser, getUserSettings, updateUserSettings } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -25,6 +256,7 @@ function Settings() {
   const [success, setSuccess] = useState("");
   const [activeTab, setActiveTab] = useState("account");
   const [resumeFile, setResumeFile] = useState(null);
+  const [userLocation, setUserLocation] = useState('');
 
   // Available ChatGPT models
   const availableModels = [
@@ -84,7 +316,7 @@ function Settings() {
           });
         }
 
-        // Load resume data
+        // Load resume data and user location
         if (currentUser) {
           const resumeRef = doc(db, "resumes", currentUser.uid);
           const resumeSnap = await getDoc(resumeRef);
@@ -93,6 +325,11 @@ function Settings() {
             const resumeData = resumeSnap.data();
             setResumeData(resumeData);
           }
+        }
+
+        // Load user location
+        if (settings && settings.basic && settings.basic.address) {
+          setUserLocation(settings.basic.address);
         }
       } catch (err) {
         setError("Failed to load settings: " + err.message);
@@ -204,6 +441,51 @@ function Settings() {
       URL.revokeObjectURL(url);
     } catch (err) {
       setError("Failed to export resume: " + err.message);
+    }
+  };
+
+  // Export resume as PDF with custom filename
+  const exportResumePdf = async () => {
+    try {
+      if (!resumeData || !resumeData.basic) {
+        setError("Resume data is not available");
+        return;
+      }
+
+      // Generate filename: fullname_role.pdf
+      const fullName = (resumeData.basic.name || 'resume')
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '');
+
+      const role = resumeData.experiences?.[0]?.titles?.[0]?.name ||
+                   resumeData.experiences?.[0]?.titles?.[0]?.title ||
+                   'professional';
+
+      const roleFormatted = role
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '');
+
+      const filename = `${fullName}_${roleFormatted}.pdf`;
+
+      // Generate PDF blob
+      const blob = await pdf(<ResumeDocument data={resumeData} userLocation={userLocation} />).toBlob();
+
+      // Download the PDF
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setSuccess(`Resume downloaded as ${filename}`);
+    } catch (err) {
+      setError("Failed to export PDF: " + err.message);
+      console.error("PDF export error:", err);
     }
   };
 
@@ -464,7 +746,17 @@ function Settings() {
                       <div className="p-4 border-b border-gray-200">
                         <div className="flex justify-between items-center">
                           <h3 className="text-lg font-medium text-gray-900">Resume Information</h3>
-                          <div className="flex space-x-2">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={exportResumePdf}
+                                className="inline-flex items-center px-3 py-2 border border-indigo-600 shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            >
+                              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Download PDF
+                            </button>
                             <button
                                 type="button"
                                 onClick={exportResumeYaml}
