@@ -258,6 +258,8 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
   const [includeObjective, setIncludeObjective] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
   const [userLocation, setUserLocation] = useState('');
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Get user settings to fetch location
   const { getUserSettings } = useAuth();
@@ -1040,13 +1042,13 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
 
             {/* Preview Panel */}
             {showPreview && (
-              <div className="flex-1 lg:col-span-3 border rounded bg-gray-100 overflow-hidden min-h-[400px] lg:min-h-0">
-                {resumeData && (
+              <div className="flex-1 lg:col-span-3 border rounded bg-gray-100 overflow-hidden min-h-[500px] lg:min-h-0" style={{ minHeight: '500px' }}>
+                {resumeData && resumeData.basic && (
                   <PDFViewer
                     width="100%"
                     height="100%"
-                    className="rounded"
-                    key={`${JSON.stringify(resumeData)}-${Date.now()}`}
+                    style={{ border: 'none', minHeight: '500px' }}
+                    showToolbar={true}
                   >
                     <ResumeDocument data={resumeData} userLocation={userLocation} />
                   </PDFViewer>
