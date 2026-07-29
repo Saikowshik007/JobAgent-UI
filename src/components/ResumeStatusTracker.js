@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { resumeApi } from '../utils/api';
 
-function ResumeStatusTracker({ resumeId, onComplete }) {
+function ResumeStatusTracker({ resumeId, onComplete, onStatusUpdate }) {
   const [status, setStatus] = useState('pending');
   const [message, setMessage] = useState('Starting resume generation...');
   const [progress, setProgress] = useState(0);
@@ -10,6 +10,11 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
   const [statusData, setStatusData] = useState(null);
   const intervalRefs = useRef({ status: null, progress: null });
   const isMounted = useRef(true);
+  const callbacks = useRef({ onComplete, onStatusUpdate });
+
+  useEffect(() => {
+    callbacks.current = { onComplete, onStatusUpdate };
+  }, [onComplete, onStatusUpdate]);
 
   useEffect(() => {
     if (!resumeId) {
@@ -32,6 +37,11 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
 
         console.log('Resume status response:', response);
         setStatusData(response);
+        callbacks.current.onStatusUpdate?.({ ...response, resumeId });
+
+        if (typeof response.progress_percentage === 'number') {
+          setProgress(response.progress_percentage);
+        }
 
         // Update status and message based on response
         if (response.status === 'completed') {
@@ -50,8 +60,8 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
           }
 
           // Notify parent component - DON'T pass YAML data, just completion status
-          if (onComplete && isMounted.current) {
-            onComplete({
+          if (callbacks.current.onComplete && isMounted.current) {
+            callbacks.current.onComplete({
               ...response,
               resumeId: resumeId
             });
@@ -71,7 +81,7 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
           }
         } else {
           // Still in progress
-          setStatus(response.status || 'processing');
+          setStatus(response.status === 'in_progress' ? 'processing' : (response.status || 'processing'));
           if (response.message) {
             setMessage(response.message);
           }
@@ -80,9 +90,8 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
           if (response.status === 'queued') {
             setProgress(10);
             setMessage('Resume generation queued...');
-          } else if (response.status === 'processing') {
-            setMessage('Analyzing job requirements and tailoring resume...');
-            // Progress will be updated by the progress interval
+          } else if (response.status === 'in_progress' || response.status === 'processing') {
+            setMessage(response.message || 'Tailoring the resume...');
           } else if (response.status === 'pending') {
             setProgress(5);
             setMessage('Initializing resume generation...');
@@ -116,30 +125,11 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
       }
     };
 
-    // Progress update function
-    const updateProgress = () => {
-      if (!isMounted.current) return;
-
-      setProgress(prevProgress => {
-        // Only increment progress if we're still processing and not completed
-        if (prevProgress < 90 && status !== 'completed' && status !== 'error') {
-          // Faster progress updates for active processing
-          if (status === 'processing') {
-            return Math.min(prevProgress + 8, 90);
-          } else {
-            return Math.min(prevProgress + 3, 85);
-          }
-        }
-        return prevProgress;
-      });
-    };
-
     // Initial check
     checkStatus();
 
-    // Set up polling intervals
+    // Poll server-owned generation state. Progress is never invented in the UI.
     intervalRefs.current.status = setInterval(checkStatus, 3000); // Check every 3 seconds
-    intervalRefs.current.progress = setInterval(updateProgress, 2000); // Update progress every 2 seconds
 
     // Cleanup function
     return () => {
@@ -155,7 +145,7 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
         intervalRefs.current.progress = null;
       }
     };
-  }, [resumeId]); // Removed onComplete from dependencies to prevent unnecessary re-renders
+  }, [resumeId]);
 
   // Additional cleanup on unmount
   useEffect(() => {
@@ -251,11 +241,11 @@ function ResumeStatusTracker({ resumeId, onComplete }) {
           {/* Additional status details */}
           {statusData && (statusData.progress_percentage || statusData.estimated_time_remaining) && (
             <div className="mt-1 text-xs text-gray-600">
-              {statusData.progress_percentage && (
+              {typeof statusData.progress_percentage === 'number' && (
                 <span>Progress: {statusData.progress_percentage}%</span>
               )}
-              {statusData.estimated_time_remaining && (
-                <span className="ml-3">ETA: {statusData.estimated_time_remaining}s</span>
+              {statusData.stage && (
+                <span className="ml-3">Step: {statusData.stage.replace(/_/g, ' ')}</span>
               )}
             </div>
           )}

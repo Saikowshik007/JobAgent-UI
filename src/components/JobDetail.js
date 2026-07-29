@@ -5,6 +5,29 @@ import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
+const generationStorageKey = (userId, jobId) => `jobagent:resume-generation:${userId}:${jobId}`;
+
+function readGeneration(userId, jobId) {
+  if (!userId || !jobId) return null;
+  try {
+    return JSON.parse(localStorage.getItem(generationStorageKey(userId, jobId)) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function saveGeneration(userId, jobId, generation) {
+  if (userId && jobId) {
+    localStorage.setItem(generationStorageKey(userId, jobId), JSON.stringify(generation));
+  }
+}
+
+function clearGeneration(userId, jobId) {
+  if (userId && jobId) {
+    localStorage.removeItem(generationStorageKey(userId, jobId));
+  }
+}
+
 function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSimplifyModal, resumeYamlVersion }) {
   const [generatingResume, setGeneratingResume] = useState(false);
   const [resumeError, setResumeError] = useState('');
@@ -21,6 +44,18 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
   const { currentUser, getUserSettings } = useAuth();
   const currentJobId = useRef(job?.id);
 
+  // Restore the server-tracked generation after a reload or navigation.
+  useEffect(() => {
+    const savedGeneration = readGeneration(currentUser?.uid, job?.id);
+    if (savedGeneration?.resumeId) {
+      setResumeId(savedGeneration.resumeId);
+      setShowStatusTracker(true);
+      setResumeMessage(savedGeneration.message || 'Resuming resume generation status...');
+      return;
+    }
+    setResumeId(job?.resume_id || null);
+  }, [currentUser?.uid, job?.id, job?.resume_id]);
+
   // COMPLETE state reset when job changes
   useEffect(() => {
     if (job?.id && currentJobId.current !== job.id) {
@@ -31,7 +66,8 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
       setResumeError('');
       setResumeMessage('');
       setUploadingToSimplify(false);
-      setShowStatusTracker(false);
+      const savedGeneration = readGeneration(currentUser?.uid, job.id);
+      setShowStatusTracker(Boolean(savedGeneration?.resumeId));
       setExpandedDescription(false);
       setStatusChanging(false);
       setLastStatusChange(null);
@@ -40,9 +76,9 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
       currentJobId.current = job.id;
 
       // Update resume ID from the new job
-      setResumeId(job.resume_id || null);
+      setResumeId(savedGeneration?.resumeId || job.resume_id || null);
     }
-  }, [job?.id, job?.resume_id]);
+  }, [currentUser?.uid, job?.id, job?.resume_id]);
 
   // Fetch user's resume data and settings when component mounts
   useEffect(() => {
@@ -171,7 +207,12 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
       if (response && response.resume_id) {
         setResumeId(response.resume_id);
         setShowStatusTracker(true);
-        onStatusChange(job.id, 'RESUME_GENERATED');
+        saveGeneration(currentUser?.uid, job.id, {
+          resumeId: response.resume_id,
+          status: response.status,
+          message: response.message,
+          updatedAt: Date.now()
+        });
       } else {
         setResumeMessage('Resume generation initiated. Check status later.');
       }
@@ -198,10 +239,23 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
     console.log('Resume generation completed:', resumeData);
     setResumeMessage('Resume generated successfully!');
     setShowStatusTracker(false);
+    clearGeneration(currentUser?.uid, job.id);
 
     if (job.status !== 'RESUME_GENERATED') {
       onStatusChange(job.id, 'RESUME_GENERATED');
     }
+  };
+
+  const handleResumeStatusUpdate = (statusUpdate) => {
+    setResumeMessage(statusUpdate.message || 'Resume generation is in progress...');
+    saveGeneration(currentUser?.uid, job.id, {
+      resumeId: statusUpdate.resumeId,
+      status: statusUpdate.status,
+      stage: statusUpdate.stage,
+      progressPercentage: statusUpdate.progress_percentage,
+      message: statusUpdate.message,
+      updatedAt: Date.now()
+    });
   };
 
   // Enhanced status change handler with animation
@@ -623,6 +677,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
               <ResumeStatusTracker
                   resumeId={resumeId}
                   onComplete={handleResumeComplete}
+                  onStatusUpdate={handleResumeStatusUpdate}
               />
             </div>
         )}
