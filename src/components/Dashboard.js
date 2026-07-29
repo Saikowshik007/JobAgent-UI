@@ -19,8 +19,8 @@ function Dashboard() {
   const [error, setError] = useState("");
   const [showJobSearch, setShowJobSearch] = useState(false);
   const [userSettings, setUserSettings] = useState(null);
-  const [selectedJobs, setSelectedJobs] = useState(new Set());
-  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const [selectedJobs] = useState(new Set());
+  const [bulkDeleteMode] = useState(false);
 
   // Modal states moved to Dashboard level
   const [showYamlModal, setShowYamlModal] = useState(false);

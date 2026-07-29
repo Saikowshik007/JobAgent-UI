@@ -6,7 +6,7 @@ import Footer from "./Footer";
 import {
   Mail, Lock, Eye, EyeOff, Loader2, CheckCircle,
   AlertCircle, ArrowRight, Briefcase, Sparkles,
-  Users, Target, TrendingUp
+  Target, TrendingUp
 } from "lucide-react";
 
 function Login() {
@@ -272,9 +272,13 @@ function Login() {
 
                 {/* Forgot Password Link */}
                 <div className="text-center">
-                  <a href="#" className="text-sm text-indigo-600 hover:text-indigo-800 transition-colors duration-200">
+                  <button
+                    type="button"
+                    onClick={() => setError("Password reset is not available yet. Please contact support.")}
+                    className="text-sm text-indigo-600 hover:text-indigo-800 transition-colors duration-200"
+                  >
                     Forgot your password?
-                  </a>
+                  </button>
                 </div>
               </form>
 
@@ -283,12 +287,12 @@ function Login() {
                 <div className="text-center">
                   <p className="text-sm text-gray-600">
                     Don't have an account?{" "}
-                    <a
-                      href="/register"
+                    <Link
+                      to="/register"
                       className="font-medium text-indigo-600 hover:text-indigo-800 transition-colors duration-200 hover:underline"
                     >
                       Create one now
-                    </a>
+                    </Link>
                   </p>
                 </div>
               </div>

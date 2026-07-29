@@ -174,14 +174,6 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
       // Get the includeObjective flag using our helper function
       const includeObjective = getIncludeObjectiveFlag();
 
-      const requestData = {
-        job_id: job.id,
-        customize: true,
-        template: "standard",
-        resume_data: userResumeData,
-        include_objective: includeObjective
-      };
-
       console.log("Resume generation request:", {
         jobId: job.id,
         hasResumeData: !!userResumeData,

@@ -161,20 +161,6 @@ function Register() {
     }));
   };
 
-  const handleWebsiteChange = (index, value) => {
-    setManualResumeData(prev => {
-      const websites = [...prev.basic.websites];
-      websites[index] = value;
-      return {
-        ...prev,
-        basic: {
-          ...prev.basic,
-          websites
-        }
-      };
-    });
-  };
-
   const addWebsite = () => {
     setManualResumeData(prev => ({
       ...prev,
