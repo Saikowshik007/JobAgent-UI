@@ -125,24 +125,26 @@ function ResumeStatusTracker({ resumeId, onComplete, onStatusUpdate }) {
       }
     };
 
+    const intervals = intervalRefs.current;
+
     // Initial check
     checkStatus();
 
     // Poll server-owned generation state. Progress is never invented in the UI.
-    intervalRefs.current.status = setInterval(checkStatus, 3000); // Check every 3 seconds
+    intervals.status = setInterval(checkStatus, 3000); // Check every 3 seconds
 
     // Cleanup function
     return () => {
       console.log('ResumeStatusTracker cleanup - stopping polling');
       isMounted.current = false;
 
-      if (intervalRefs.current.status) {
-        clearInterval(intervalRefs.current.status);
-        intervalRefs.current.status = null;
+      if (intervals.status) {
+        clearInterval(intervals.status);
+        intervals.status = null;
       }
-      if (intervalRefs.current.progress) {
-        clearInterval(intervalRefs.current.progress);
-        intervalRefs.current.progress = null;
+      if (intervals.progress) {
+        clearInterval(intervals.progress);
+        intervals.progress = null;
       }
     };
   }, [resumeId]);

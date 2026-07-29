@@ -1,7 +1,7 @@
 // ResumeYamlModal.js - Updated with Helvetica font and proper character handling
 import React, { useState, useEffect, useRef } from 'react';
 import yaml from 'js-yaml';
-import { Document, Page, Text, View, StyleSheet, PDFViewer, Font, Link, pdf } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, PDFViewer, Link, pdf } from '@react-pdf/renderer';
 import { useAuth } from "../contexts/AuthContext";
 import { useResumeData, useDragAndDrop } from '../hooks/useResumeData';
 import {
@@ -258,8 +258,6 @@ const ResumeYamlModal = ({ yamlContent, onSave, onClose }) => {
   const [includeObjective, setIncludeObjective] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
   const [userLocation, setUserLocation] = useState('');
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Get user settings to fetch location
   const { getUserSettings } = useAuth();

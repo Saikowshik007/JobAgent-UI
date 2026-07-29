@@ -15,7 +15,6 @@ import {
   ProfessionalSummaryForm,
   HighlightItem,
   AddButton,
-  SectionHeader,
   DragHandle
 } from "./resume/ResumeFormComponents";
 
@@ -342,7 +341,7 @@ function Settings() {
   }, [getUserSettings, currentUser, setResumeData]);
 
   const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, checked } = e.target;
 
     if (name === "model") {
       // Handle model INSIDE settings, not at root level
