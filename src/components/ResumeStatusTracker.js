@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { resumeApi } from '../utils/api';
 
-function ResumeStatusTracker({ resumeId, onComplete, onStatusUpdate }) {
+function ResumeStatusTracker({ resumeId, onComplete, onStatusUpdate, onFailed, onRetry }) {
   const [status, setStatus] = useState('pending');
   const [message, setMessage] = useState('Starting resume generation...');
   const [progress, setProgress] = useState(0);
@@ -10,11 +10,11 @@ function ResumeStatusTracker({ resumeId, onComplete, onStatusUpdate }) {
   const [statusData, setStatusData] = useState(null);
   const intervalRefs = useRef({ status: null, progress: null });
   const isMounted = useRef(true);
-  const callbacks = useRef({ onComplete, onStatusUpdate });
+  const callbacks = useRef({ onComplete, onStatusUpdate, onFailed, onRetry });
 
   useEffect(() => {
-    callbacks.current = { onComplete, onStatusUpdate };
-  }, [onComplete, onStatusUpdate]);
+    callbacks.current = { onComplete, onStatusUpdate, onFailed, onRetry };
+  }, [onComplete, onStatusUpdate, onFailed, onRetry]);
 
   useEffect(() => {
     if (!resumeId) {
@@ -69,6 +69,7 @@ function ResumeStatusTracker({ resumeId, onComplete, onStatusUpdate }) {
         } else if (response.status === 'error' || response.status === 'failed') {
           setStatus('error');
           setError(response.message || response.error || 'Resume generation failed');
+          callbacks.current.onFailed?.({ ...response, resumeId });
 
           // Clear intervals on error
           if (intervalRefs.current.status) {
@@ -258,10 +259,11 @@ function ResumeStatusTracker({ resumeId, onComplete, onStatusUpdate }) {
       {status === 'error' && (
         <div className="mt-3">
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => callbacks.current.onRetry?.()}
+            disabled={!callbacks.current.onRetry}
             className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
           >
-            Retry Generation
+            Retry generation
           </button>
         </div>
       )}

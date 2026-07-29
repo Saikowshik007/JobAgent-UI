@@ -238,6 +238,18 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
     }
   };
 
+  const handleResumeFailed = (statusUpdate) => {
+    clearGeneration(currentUser?.uid, job.id);
+    setResumeError(statusUpdate.message || statusUpdate.error || 'Resume generation failed');
+  };
+
+  const handleResumeRetry = async () => {
+    clearGeneration(currentUser?.uid, job.id);
+    setShowStatusTracker(false);
+    setResumeError('');
+    await handleGenerateResume();
+  };
+
   const handleResumeStatusUpdate = (statusUpdate) => {
     setResumeMessage(statusUpdate.message || 'Resume generation is in progress...');
     saveGeneration(currentUser?.uid, job.id, {
@@ -670,6 +682,8 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
                   resumeId={resumeId}
                   onComplete={handleResumeComplete}
                   onStatusUpdate={handleResumeStatusUpdate}
+                  onFailed={handleResumeFailed}
+                  onRetry={handleResumeRetry}
               />
             </div>
         )}
