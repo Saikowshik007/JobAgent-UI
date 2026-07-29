@@ -419,6 +419,21 @@ export const resumeApi = {
     });
   },
 
+  // Convert a source PDF into the canonical editable resume fields.
+  parseResumePdf(file, apiKey, model = 'gpt-4o') {
+    const user = auth.currentUser;
+    if (!user) throw new Error('User not authenticated');
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('api_key', apiKey || '');
+    formData.append('model', model);
+    return apiRequest(`/api/resume/${user.uid}/parse-pdf`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
   // Update resume YAML - Automatically uses current user
   updateResumeYaml(resumeId, yamlContent) {
     const user = auth.currentUser;

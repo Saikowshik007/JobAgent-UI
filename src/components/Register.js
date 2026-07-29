@@ -6,6 +6,7 @@ import { db } from "../firebase/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import Footer from "./Footer";
 import yaml from "js-yaml";
+import { resumeApi } from "../utils/api";
 
 function Register() {
   const [email, setEmail] = useState("");
@@ -124,12 +125,20 @@ function Register() {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.yaml') && !file.name.endsWith('.yml')) {
-      setError("Please upload a valid YAML resume file");
+    const isYaml = file.name.endsWith('.yaml') || file.name.endsWith('.yml');
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+    if (!isYaml && !isPdf) {
+      setError("Please upload a YAML or PDF resume file");
       return;
     }
 
     setResumeFile(file);
+    setError("");
+
+    if (isPdf) {
+      setResumeData(null);
+      return;
+    }
 
     // Read and parse the YAML file
     const reader = new FileReader();
@@ -186,8 +195,8 @@ function Register() {
     }
 
     // Validate resume data based on entry method
-    if (entryMethod === "upload" && !resumeData) {
-      return setError("Please upload your resume YAML file");
+    if (entryMethod === "upload" && !resumeFile) {
+      return setError("Please upload your resume YAML or PDF file");
     }
 
     try {
@@ -197,9 +206,18 @@ function Register() {
       // Sign up the user
       const user = await signup(email, password, openaiApiKey);
 
+      let sourceResumeData = resumeData;
+      if (entryMethod === "upload" && resumeFile?.name.toLowerCase().endsWith(".pdf")) {
+        if (!openaiApiKey.trim()) {
+          throw new Error("An OpenAI API key is required to convert a PDF resume");
+        }
+        const parsed = await resumeApi.parseResumePdf(resumeFile, openaiApiKey);
+        sourceResumeData = parsed.resume_data;
+      }
+
       // Upload resume data to Firestore based on entry method
       if (entryMethod === "upload") {
-        await uploadResumeToFirebase(user.uid, resumeData);
+        await uploadResumeToFirebase(user.uid, sourceResumeData);
       } else {
         await uploadResumeToFirebase(user.uid, manualResumeData);
       }
@@ -431,7 +449,7 @@ function Register() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <p className="text-sm text-gray-500">
-                      Upload your resume.yaml file to automatically fill your profile
+                      Upload a YAML resume, or a PDF and let AI populate the editable profile fields
                     </p>
                     <button
                       type="button"
@@ -449,7 +467,7 @@ function Register() {
                     id="resume-upload"
                     name="resume-upload"
                     type="file"
-                    accept=".yaml,.yml"
+                    accept=".yaml,.yml,.pdf,application/pdf"
                     className="block w-full text-sm text-gray-500
                       file:mr-4 file:py-2 file:px-4
                       file:rounded-xl file:border-0
@@ -469,6 +487,14 @@ function Register() {
                           Resume successfully loaded: {resumeFile?.name}
                         </p>
                       </div>
+                    </div>
+                  )}
+
+                  {resumeFile?.name.toLowerCase().endsWith('.pdf') && !resumeData && (
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl animate-slide-down">
+                      <p className="text-sm text-blue-700">
+                        PDF selected: {resumeFile.name}. It will be converted into editable resume fields after account creation.
+                      </p>
                     </div>
                   )}
 

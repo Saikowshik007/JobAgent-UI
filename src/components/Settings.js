@@ -8,6 +8,7 @@ import Footer from "./Footer";
 import yaml from "js-yaml";
 import { pdf, Document, Page, Text, View, StyleSheet, Link } from '@react-pdf/renderer';
 import { useResumeData, useDragAndDrop } from "../hooks/useResumeData";
+import { resumeApi } from "../utils/api";
 import {
   DeleteButton,
   DraggableItem,
@@ -390,16 +391,42 @@ function Settings() {
   };
 
   // Resume file upload handler
-  const handleResumeUpload = (e) => {
+  const handleResumeUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.yaml') && !file.name.endsWith('.yml')) {
-      setError("Please upload a valid YAML resume file");
+    const isYaml = file.name.endsWith('.yaml') || file.name.endsWith('.yml');
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+    if (!isYaml && !isPdf) {
+      setError("Please upload a YAML or PDF resume file");
       return;
     }
 
     setResumeFile(file);
+    setError("");
+    setSuccess("");
+
+    if (isPdf) {
+      if (!formData.openaiApiKey.trim()) {
+        setError("Add your OpenAI API key above before importing a PDF resume");
+        return;
+      }
+      try {
+        setLoading(true);
+        const parsed = await resumeApi.parseResumePdf(
+          file,
+          formData.openaiApiKey,
+          formData.settings.model,
+        );
+        setResumeData(parsed.resume_data);
+        setSuccess("PDF converted to editable resume fields. Review and save the result.");
+      } catch (err) {
+        setError("Failed to convert PDF resume: " + err.message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     // Read and parse the YAML file
     const reader = new FileReader();
@@ -764,10 +791,10 @@ function Settings() {
                               Export YAML
                             </button>
                             <label className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer">
-                              Import YAML
+                              Import YAML or PDF
                               <input
                                   type="file"
-                                  accept=".yaml,.yml"
+                                  accept=".yaml,.yml,.pdf,application/pdf"
                                   className="hidden"
                                   onChange={handleResumeUpload}
                               />
