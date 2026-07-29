@@ -4,6 +4,7 @@ import ResumeStatusTracker from './ResumeStatusTracker';
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
+import yaml from "js-yaml";
 
 const generationStorageKey = (userId, jobId) => `jobagent:resume-generation:${userId}:${jobId}`;
 
@@ -40,6 +41,7 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
   const [statusChanging, setStatusChanging] = useState(false);
   const [lastStatusChange, setLastStatusChange] = useState(null);
   const [userSettings, setUserSettings] = useState(null); // Add state for user settings
+  const [matchReport, setMatchReport] = useState(null);
 
   const { currentUser, getUserSettings } = useAuth();
   const currentJobId = useRef(job?.id);
@@ -55,6 +57,34 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
     }
     setResumeId(job?.resume_id || null);
   }, [currentUser?.uid, job?.id, job?.resume_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!resumeId || showStatusTracker) {
+      setMatchReport(null);
+      return undefined;
+    }
+
+    const loadMatchReport = async () => {
+      try {
+        const yamlContent = await resumeApi.getResumeYaml(resumeId);
+        const parsedResume = yaml.load(yamlContent);
+        if (!cancelled) {
+          setMatchReport(parsedResume?.metadata?.match_report || null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("Could not load resume match report:", error.message);
+          setMatchReport(null);
+        }
+      }
+    };
+
+    loadMatchReport();
+    return () => {
+      cancelled = true;
+    };
+  }, [resumeId, showStatusTracker]);
 
   // COMPLETE state reset when job changes
   useEffect(() => {
@@ -331,6 +361,11 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
   const isEasyApply = () => metadata.is_easy_apply === true ? 'Yes' : 'No';
   const getSalary = () => metadata.salary || 'Not specified';
   const description = job.description || metadata.job_summary || "No description available";
+  const matchedRequirements = matchReport?.matched_requirements || 0;
+  const requirementsEvaluated = matchReport?.requirements_evaluated ?? (matchedRequirements + (matchReport?.gaps?.length || 0));
+  const evidenceCoverage = matchReport?.evidence_coverage_percentage ?? (
+    requirementsEvaluated ? Math.round((matchedRequirements / requirementsEvaluated) * 100) : 0
+  );
 
   // Validate job object after hooks
   if (!job || !job.id) {
@@ -628,6 +663,34 @@ function JobDetail({ job, onStatusChange, onDeleteJob, onShowYamlModal, onShowSi
                     <span>View/Edit Resume</span>
                   </button>
                 </div>
+              </div>
+          )}
+
+          {matchReport && (
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-6 border border-emerald-200">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-lg font-semibold text-emerald-900">Resume evidence coverage</h4>
+                    <p className="mt-1 text-sm text-emerald-800">
+                      Based on job requirements directly supported by your source resume.
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-3xl font-bold text-emerald-700">
+                      {evidenceCoverage}%
+                    </div>
+                    <div className="text-sm text-emerald-800">
+                      {matchedRequirements} of {requirementsEvaluated} requirements supported
+                    </div>
+                  </div>
+                </div>
+
+                {matchReport.gaps?.length > 0 && (
+                    <div className="mt-4 border-t border-emerald-200 pt-4">
+                      <p className="text-sm font-medium text-emerald-900">Unmatched requirements</p>
+                      <p className="mt-1 text-sm text-emerald-800">{matchReport.gaps.join(' • ')}</p>
+                    </div>
+                )}
               </div>
           )}
         </div>
