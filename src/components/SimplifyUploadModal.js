@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import { simplifyApi, resumeApi } from '../utils/api';
 import { pdf } from '@react-pdf/renderer';
-import { Document, Page, Text, View, StyleSheet, Font, Link } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Link } from '@react-pdf/renderer';
 import yaml from 'js-yaml';
 
 // PDF styles using Times New Roman (built-in font) - reliable and professional
@@ -252,7 +251,6 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, resumeYamlVersi
   const [csrfToken, setCsrfToken] = useState('');
   const [authToken, setAuthToken] = useState('');
   const [lastResumeYamlVersion, setLastResumeYamlVersion] = useState(-1);
-  const { currentUser } = useAuth();
 
   useEffect(() => {
     if (isOpen) {
@@ -262,6 +260,8 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, resumeYamlVersi
       setAuthToken('');
       checkSessionAndLoadData();
     }
+  // This lifecycle intentionally restarts only for a new modal session or resume.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, resumeId]);
 
   useEffect(() => {
@@ -270,6 +270,8 @@ const SimplifyUploadModal = ({ isOpen, onClose, resumeId, jobId, resumeYamlVersi
       setLastResumeYamlVersion(resumeYamlVersion);
       fetchResumeData(true);
     }
+  // This lifecycle intentionally refreshes only when a saved YAML version changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeYamlVersion, isOpen, lastResumeYamlVersion]);
 
   const checkSessionAndLoadData = async () => {
