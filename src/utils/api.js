@@ -420,15 +420,16 @@ export const resumeApi = {
   },
 
   // Convert a source PDF into the canonical editable resume fields.
-  parseResumePdf(file, apiKey, model = 'gpt-4o') {
+  parseResumePdf(file, apiKey, model = 'gpt-4o', userId = null) {
     const user = auth.currentUser;
-    if (!user) throw new Error('User not authenticated');
+    const effectiveUserId = user?.uid || userId;
+    if (!effectiveUserId) throw new Error('User not authenticated');
 
     const formData = new FormData();
     formData.append('file', file);
     formData.append('api_key', apiKey || '');
     formData.append('model', model);
-    return apiRequest(`/api/resume/${user.uid}/parse-pdf`, {
+    return apiRequest(`/api/resume/${effectiveUserId}/parse-pdf`, {
       method: 'POST',
       body: formData,
     });

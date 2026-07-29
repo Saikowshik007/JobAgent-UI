@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { resumeApi } from '../utils/api';
 
-function ResumeStatusTracker({ resumeId, onComplete, onStatusUpdate, onFailed, onRetry }) {
+function ResumeStatusTracker({ resumeId, title = 'Resume Generation Status', onComplete, onStatusUpdate, onFailed, onRetry }) {
   const [status, setStatus] = useState('pending');
   const [message, setMessage] = useState('Starting resume generation...');
   const [progress, setProgress] = useState(0);
@@ -18,7 +18,7 @@ function ResumeStatusTracker({ resumeId, onComplete, onStatusUpdate, onFailed, o
 
   useEffect(() => {
     if (!resumeId) {
-      setError('No resume ID provided for tracking');
+      setError('No operation ID provided for tracking');
       return;
     }
 
@@ -199,7 +199,7 @@ function ResumeStatusTracker({ resumeId, onComplete, onStatusUpdate, onFailed, o
 
   return (
     <div className="p-4 border rounded-md bg-gray-50">
-      <h3 className="text-sm font-medium text-gray-900 mb-2">Resume Generation Status</h3>
+      <h3 className="text-sm font-medium text-gray-900 mb-2">{title}</h3>
 
       {/* Progress bar */}
       <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">

@@ -5,10 +5,10 @@ import { db } from "../firebase/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
-import yaml from "js-yaml";
 import { pdf, Document, Page, Text, View, StyleSheet, Link } from '@react-pdf/renderer';
 import { useResumeData, useDragAndDrop } from "../hooks/useResumeData";
 import { resumeApi } from "../utils/api";
+import ResumeStatusTracker from "./ResumeStatusTracker";
 import {
   DeleteButton,
   DraggableItem,
@@ -256,6 +256,7 @@ function Settings() {
   const [success, setSuccess] = useState("");
   const [activeTab, setActiveTab] = useState("account");
   const [resumeFile, setResumeFile] = useState(null);
+  const [pdfImportId, setPdfImportId] = useState(null);
   const [userLocation, setUserLocation] = useState('');
 
   // Available ChatGPT models
@@ -395,10 +396,9 @@ function Settings() {
     const file = e.target.files[0];
     if (!file) return;
 
-    const isYaml = file.name.endsWith('.yaml') || file.name.endsWith('.yml');
     const isPdf = file.name.toLowerCase().endsWith('.pdf');
-    if (!isYaml && !isPdf) {
-      setError("Please upload a YAML or PDF resume file");
+    if (!isPdf) {
+      setError("Please upload a PDF resume file");
       return;
     }
 
@@ -406,67 +406,15 @@ function Settings() {
     setError("");
     setSuccess("");
 
-    if (isPdf) {
-      if (!formData.openaiApiKey.trim()) {
-        setError("Add your OpenAI API key above before importing a PDF resume");
-        return;
-      }
-      try {
-        setLoading(true);
-        const parsed = await resumeApi.parseResumePdf(
-          file,
-          formData.openaiApiKey,
-          formData.settings.model,
-        );
-        setResumeData(parsed.resume_data);
-        setSuccess("PDF converted to editable resume fields. Review and save the result.");
-      } catch (err) {
-        setError("Failed to convert PDF resume: " + err.message);
-      } finally {
-        setLoading(false);
-      }
+    if (!formData.openaiApiKey.trim()) {
+      setError("Add your OpenAI API key above before importing a PDF resume");
       return;
     }
-
-    // Read and parse the YAML file
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const yamlContent = event.target.result;
-        const parsedData = yaml.load(yamlContent);
-        setResumeData(parsedData);
-        setError("");
-        setSuccess("Resume file loaded successfully!");
-      } catch (err) {
-        setError("Failed to parse resume file: " + err.message);
-      }
-    };
-    reader.onerror = () => {
-      setError("Failed to read resume file");
-    };
-    reader.readAsText(file);
-  };
-
-  // Export resume as YAML
-  const exportResumeYaml = () => {
     try {
-      const yamlContent = resumeHook.exportToYaml();
-      if (!yamlContent) {
-        setError("Failed to export resume");
-        return;
-      }
-
-      const blob = new Blob([yamlContent], { type: 'text/yaml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'resume.yaml';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const result = await resumeApi.parseResumePdf(file, formData.openaiApiKey, formData.settings.model);
+      setPdfImportId(result.import_id);
     } catch (err) {
-      setError("Failed to export resume: " + err.message);
+      setError("Failed to start PDF resume import: " + err.message);
     }
   };
 
@@ -783,18 +731,11 @@ function Settings() {
                               </svg>
                               Download PDF
                             </button>
-                            <button
-                                type="button"
-                                onClick={exportResumeYaml}
-                                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                            >
-                              Export YAML
-                            </button>
                             <label className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer">
-                              Import YAML or PDF
+                              Import PDF
                               <input
                                   type="file"
-                                  accept=".yaml,.yml,.pdf,application/pdf"
+                                  accept=".pdf,application/pdf"
                                   className="hidden"
                                   onChange={handleResumeUpload}
                               />
@@ -806,6 +747,24 @@ function Settings() {
                             <p className="mt-2 text-sm text-green-600">
                               Resume successfully loaded: {resumeFile.name}
                             </p>
+                        )}
+                        {pdfImportId && (
+                          <div className="mt-4">
+                            <ResumeStatusTracker
+                              resumeId={pdfImportId}
+                              title="PDF Resume Import"
+                              onComplete={(result) => {
+                                if (!result.resume_data) {
+                                  setError("PDF import completed without resume data");
+                                  return;
+                                }
+                                setResumeData(result.resume_data);
+                                setPdfImportId(null);
+                                setSuccess("PDF converted to editable fields. Review and save the result.");
+                              }}
+                              onFailed={(result) => setError(result.error || result.message || "PDF import failed")}
+                            />
+                          </div>
                         )}
                       </div>
 

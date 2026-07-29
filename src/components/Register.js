@@ -5,8 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { db } from "../firebase/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import Footer from "./Footer";
-import yaml from "js-yaml";
 import { resumeApi } from "../utils/api";
+import ResumeStatusTracker from "./ResumeStatusTracker";
 
 function Register() {
   const [email, setEmail] = useState("");
@@ -16,7 +16,8 @@ function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resumeFile, setResumeFile] = useState(null);
-  const [resumeData, setResumeData] = useState(null);
+  const [pdfImportId, setPdfImportId] = useState(null);
+  const [pdfImportUserId, setPdfImportUserId] = useState(null);
   const [entryMethod, setEntryMethod] = useState("upload");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -84,40 +85,8 @@ function Register() {
     setEntryMethod(entryMethod === "upload" ? "manual" : "upload");
     // Clear any existing resume data when switching methods
     if (entryMethod === "upload") {
-      setResumeData(null);
       setResumeFile(null);
-    }
-  };
-
-  // Function to download sample resume file
-  const downloadSampleFile = () => {
-    try {
-      // Fetch the sample file from the public folder
-      fetch('/sample-resume.yaml')
-        .then(response => {
-          if (!response.ok) {
-            throw new Error('Sample file not found');
-          }
-          return response.blob();
-        })
-        .then(blob => {
-          // Create download link
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = 'sample-resume.yaml';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-        })
-        .catch(error => {
-          console.error('Error downloading sample file:', error);
-          setError('Failed to download sample file. Please try again.');
-        });
-    } catch (error) {
-      console.error('Error downloading sample file:', error);
-      setError('Failed to download sample file. Please try again.');
+      setPdfImportId(null);
     }
   };
 
@@ -125,37 +94,15 @@ function Register() {
     const file = e.target.files[0];
     if (!file) return;
 
-    const isYaml = file.name.endsWith('.yaml') || file.name.endsWith('.yml');
     const isPdf = file.name.toLowerCase().endsWith('.pdf');
-    if (!isYaml && !isPdf) {
-      setError("Please upload a YAML or PDF resume file");
+    if (!isPdf) {
+      setError("Please upload a PDF resume file");
       return;
     }
 
     setResumeFile(file);
     setError("");
 
-    if (isPdf) {
-      setResumeData(null);
-      return;
-    }
-
-    // Read and parse the YAML file
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const yamlContent = event.target.result;
-        const parsedData = yaml.load(yamlContent);
-        setResumeData(parsedData);
-        setError("");
-      } catch (err) {
-        setError("Failed to parse resume file: " + err.message);
-      }
-    };
-    reader.onerror = () => {
-      setError("Failed to read resume file");
-    };
-    reader.readAsText(file);
   };
 
   // Handle changes to the manual entry form
@@ -196,7 +143,7 @@ function Register() {
 
     // Validate resume data based on entry method
     if (entryMethod === "upload" && !resumeFile) {
-      return setError("Please upload your resume YAML or PDF file");
+      return setError("Please upload your resume PDF file");
     }
 
     try {
@@ -206,21 +153,19 @@ function Register() {
       // Sign up the user
       const user = await signup(email, password, openaiApiKey);
 
-      let sourceResumeData = resumeData;
-      if (entryMethod === "upload" && resumeFile?.name.toLowerCase().endsWith(".pdf")) {
+      if (entryMethod === "upload") {
         if (!openaiApiKey.trim()) {
           throw new Error("An OpenAI API key is required to convert a PDF resume");
         }
-        const parsed = await resumeApi.parseResumePdf(resumeFile, openaiApiKey);
-        sourceResumeData = parsed.resume_data;
+        const parsed = await resumeApi.parseResumePdf(resumeFile, openaiApiKey, 'gpt-4o', user.uid);
+        setPdfImportUserId(user.uid);
+        setPdfImportId(parsed.import_id);
+        setLoading(false);
+        return;
       }
 
       // Upload resume data to Firestore based on entry method
-      if (entryMethod === "upload") {
-        await uploadResumeToFirebase(user.uid, sourceResumeData);
-      } else {
-        await uploadResumeToFirebase(user.uid, manualResumeData);
-      }
+      await uploadResumeToFirebase(user.uid, manualResumeData);
 
       navigate("/dashboard");
     } catch (error) {
@@ -449,25 +394,15 @@ function Register() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <p className="text-sm text-gray-500">
-                      Upload a YAML resume, or a PDF and let AI populate the editable profile fields
+                      Upload a PDF and let AI populate the editable profile fields.
                     </p>
-                    <button
-                      type="button"
-                      onClick={downloadSampleFile}
-                      className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105"
-                    >
-                      <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      Sample File
-                    </button>
                   </div>
 
                   <input
                     id="resume-upload"
                     name="resume-upload"
                     type="file"
-                    accept=".yaml,.yml,.pdf,application/pdf"
+                    accept=".pdf,application/pdf"
                     className="block w-full text-sm text-gray-500
                       file:mr-4 file:py-2 file:px-4
                       file:rounded-xl file:border-0
@@ -477,32 +412,38 @@ function Register() {
                     onChange={handleResumeUpload}
                   />
 
-                  {resumeData && (
-                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-xl animate-slide-down">
-                      <div className="flex items-center space-x-2">
-                        <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <p className="text-sm text-green-600">
-                          Resume successfully loaded: {resumeFile?.name}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {resumeFile?.name.toLowerCase().endsWith('.pdf') && !resumeData && (
+                  {resumeFile?.name.toLowerCase().endsWith('.pdf') && (
                     <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl animate-slide-down">
                       <p className="text-sm text-blue-700">
-                        PDF selected: {resumeFile.name}. It will be converted into editable resume fields after account creation.
+                        PDF selected: {resumeFile.name}. Create your account to begin the server-tracked import.
                       </p>
                     </div>
                   )}
 
                   <div className="mt-3 p-3 bg-blue-50 rounded-xl">
-                    <p className="text-sm text-blue-800">
-                      <strong>Need help getting started?</strong> Download our sample file to see the expected format, then customize it with your own information.
-                    </p>
+                    <p className="text-sm text-blue-800">Your PDF is used only to extract editable resume fields.</p>
                   </div>
+                  {pdfImportId && (
+                    <div className="mt-4">
+                      <ResumeStatusTracker
+                        resumeId={pdfImportId}
+                        title="PDF Resume Import"
+                        onComplete={async (result) => {
+                          if (!result.resume_data || !pdfImportUserId) {
+                            setError("PDF import completed without resume data");
+                            return;
+                          }
+                          try {
+                            await uploadResumeToFirebase(pdfImportUserId, result.resume_data);
+                            navigate("/dashboard");
+                          } catch (saveError) {
+                            setError("Could not save the imported resume: " + saveError.message);
+                          }
+                        }}
+                        onFailed={(result) => setError(result.error || result.message || "PDF import failed")}
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* Manual Entry Option */
